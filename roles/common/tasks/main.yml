@@ -1,0 +1,4 @@
+---
+- name: Ping kiểm tra kết nối
+  import_tasks: ping.yml
+

@@ -1,0 +1,45 @@
+- name: Install and configure Suricata on AlmaLinux
+  hosts: all
+  become: yes  # Chạy với quyền root
+  tasks:
+  
+    # Cài đặt EPEL repository, cần thiết để cài Suricata
+    - name: Install EPEL repository
+      dnf:
+        name: epel-release
+        state: present
+      when: ansible_os_family == "RedHat"  # Đảm bảo chạy trên hệ điều hành phù hợp
+
+    # Cài đặt Suricata từ kho DNF
+    - name: Install Suricata
+      dnf:
+        name: suricata
+        state: present
+      when: ansible_os_family == "RedHat"
+      register: install_result  # Lưu kết quả cài đặt vào biến
+      failed_when: install_result.rc != 0  # Nếu mã thoát không phải 0 thì báo lỗi
+
+    # Cấu hình mạng HOME_NET trong suricata.yaml
+    - name: Configure Suricata HOME_NET
+      lineinfile:
+        path: /etc/suricata/suricata.yaml
+        regexp: '^(\s*HOME_NET:).*'  # Tìm dòng chứa HOME_NET
+        line: '    HOME_NET: "[192.168.193.0/24]"'  # Cập nhật giá trị
+        backrefs: yes  # Giữ nguyên phần đầu của dòng
+      when: install_result is success  # Chỉ chạy nếu cài đặt thành công
+
+    # Cập nhật rules mới nhất cho Suricata
+    - name: Update Suricata rules
+      shell: suricata-update
+      register: update_rules  # Lưu kết quả cập nhật rules
+      changed_when: update_rules.rc == 0  # Đánh dấu task là "changed" nếu thành công
+      when: install_result is success
+
+    # Bật và khởi động dịch vụ Suricata
+    - name: Start and enable Suricata
+      service:
+        name: suricata
+        state: started
+        enabled: yes  # Kích hoạt chạy tự động khi boot
+      when: install_result is success
+

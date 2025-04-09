@@ -1,0 +1,33 @@
+---
+- name: Test ping các host
+  hosts: all
+  gather_facts: true
+  roles:
+    - role: common
+      become: "{{ ansible_os_family != 'Windows' }}"
+  tags: ping      
+
+- name: Test check Features
+  hosts: win_server
+  gather_facts: true
+  vars:
+    webserver_tasks:
+      - get_features
+  roles:
+    - role: webserver
+      become: false
+  tags: check_features
+
+- name: Test Install web
+  hosts: win_server
+  gather_facts: true
+  vars:
+    webserver_tasks:
+      - install_iis
+      - deploy_site
+      - check_site
+  roles:
+    - role: webserver
+      become: false
+  tags: install_web
+

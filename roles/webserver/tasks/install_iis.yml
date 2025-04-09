@@ -1,0 +1,11 @@
+---
+- name: Cài đặt IIS Web Server
+  win_feature:
+    name: Web-Server
+    state: present
+  register: iis_result
+
+- name: Khởi động lại nếu cần (do cài IIS)
+  win_reboot:
+  when: iis_result.reboot_required
+

@@ -1,0 +1,12 @@
+---
+- name: Kiểm tra và cài đặt các bản cập nhật Windows
+  win_updates:
+    category_names:
+      - SecurityUpdates
+      - CriticalUpdates
+    reboot: yes
+  register: patch_result
+
+- name: Hiển thị kết quả cập nhật
+  debug:
+    var: patch_result

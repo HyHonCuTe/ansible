@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Website Ansible</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style>
+    body {
+      background: linear-gradient(135deg, #1d3557, #457b9d);
+      color: white;
+      font-family: 'Segoe UI', sans-serif;
+      padding-top: 50px;
+    }
+
+    h1 {
+      animation: fadeInDown 1.5s ease-in-out;
+      font-size: 3rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    .card {
+      background-color: #ffffff;
+      color: #333;
+      border-radius: 20px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+      margin-top: 30px;
+      transition: transform 0.3s ease-in-out;
+    }
+
+    .card:hover {
+      transform: translateY(-10px);
+    }
+
+    .card-body {
+      padding: 40px;
+    }
+
+    .card-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #1d3557;
+      margin-bottom: 20px;
+    }
+
+    .form-control, .btn-custom {
+      border-radius: 25px;
+    }
+
+    .form-control:focus {
+      box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
+      border-color: #457b9d;
+    }
+
+    .btn-custom {
+      background-color: #1d3557;
+      color: white;
+      padding: 15px 0;
+      border: none;
+      font-size: 1.2rem;
+    }
+
+    .btn-custom:hover {
+      background-color: #457b9d;
+    }
+
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .card {
+      max-width: 600px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-body">
+        <h1 class="text-center mb-4">🌐 Website được triển khai bằng Ansible 🎯</h1>
+
+        <h3 class="card-title text-center">📄 Giới thiệu về Ansible</h3>
+        <p class="text-center">Ansible là một công cụ tự động hóa mạnh mẽ giúp quản lý và triển khai cấu hình, phần mềm và hệ thống. Nó giúp giảm thiểu công sức và rủi ro trong các hoạt động IT, đặc biệt là trong việc triển khai các ứng dụng và hệ thống phức tạp.</p>
+
+        <h4 class="card-title text-center mt-4">📝 Để lại thông tin của bạn</h4>
+
+        <form id="infoForm">
+          <div class="mb-4">
+            <label for="ten" class="form-label">Họ và tên</label>
+            <input type="text" class="form-control" id="ten" placeholder="Nhập họ tên...">
+          </div>
+
+  
+
+          <button type="submit" class="btn btn-custom w-100">Gửi thông tin</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // Sử dụng JavaScript để hiển thị thông báo chào mừng trên thanh trình duyệt
+    document.getElementById('infoForm').addEventListener('submit', function(event) {
+      event.preventDefault(); // Ngăn chặn gửi form mặc định
+
+      // Lấy tên người dùng nhập vào
+      var userName = document.getElementById('ten').value;
+
+      // Kiểm tra nếu tên người dùng không rỗng
+      if (userName.trim() !== "") {
+        // Hiển thị thông báo trên thanh trình duyệt
+        alert('Chào mừng, ' + userName + '! Cảm ơn bạn đã để lại thông tin.');
+      }
+    });
+  </script>
+</body>
+</html>

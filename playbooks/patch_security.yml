@@ -1,0 +1,41 @@
+# - name: Patch security based on VirusTotal-verified threats
+#   hosts: all
+#   become: yes
+#   vars:
+#     log_file: "/var/log/security_patch.log"
+#     threat_files: "{{ threat_files | default([]) }}"
+
+#   tasks:
+#     - name: Remove detected threat files
+#       file:
+#         path: "{{ item }}"
+#         state: absent
+#       loop: "{{ threat_files }}"
+#       when: threat_files | length > 0
+#       register: removal_result
+
+#     - name: Log removal actions
+#       lineinfile:
+#         path: "{{ log_file }}"
+#         line: "{{ ansible_date_time.iso8601 }} - Removed threat: {{ item }}"
+#         create: yes
+#         mode: '0644'
+#       loop: "{{ threat_files }}"
+#       when: removal_result.changed
+
+#     - name: Update package cache
+#       dnf:
+#         update_cache: yes
+#       when: ansible_os_family == "RedHat"
+
+#     - name: Apply security updates
+#       dnf:
+#         name: '*'
+#         state: latest
+#         security: yes
+
+
+#     - name: Reboot if security updates applied
+#       reboot:
+#         msg: "Rebooting due to security updates"
+#       when: update_result.changed

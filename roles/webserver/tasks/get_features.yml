@@ -1,0 +1,7 @@
+- name: Lấy danh sách tính năng đã cài đặt
+  ansible.windows.win_feature_info:
+  register: windows_feature_info
+
+- name: Hiển thị danh sách tên các tính năng đã cài
+  debug:
+    msg: "{{ windows_feature_info.features | selectattr('installed', 'equalto', true) | map(attribute='name') | list }}"

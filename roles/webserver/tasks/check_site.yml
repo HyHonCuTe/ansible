@@ -1,0 +1,16 @@
+---
+- name: Kiểm tra truy cập web nội bộ
+  win_uri:
+    url: http://localhost:8080/
+    method: GET
+    return_content: yes       # ✅ Phải có dòng này để trả về nội dung HTML
+  register: web_check
+
+- name: In toàn bộ kết quả truy cập web
+  debug:
+    var: web_check
+
+- name: In nội dung trả về từ web
+  debug:
+    var: web_check.content
+

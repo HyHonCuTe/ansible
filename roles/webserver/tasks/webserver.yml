@@ -1,0 +1,102 @@
+---
+- name: Cấu hình Web Server IIS và Nginx trên Windows
+  hosts: win_server
+  gather_facts: yes
+  become: false
+
+  tasks:
+    - name: Cài IIS cơ bản
+      win_feature:
+        name: Web-Server
+        state: present
+
+    - name: Cài đặt các tính năng IIS bổ sung
+      win_feature:
+        name:
+          - Web-ASP
+          - Web-Static-Content
+          - Web-Asp-Net
+          - Web-Net-Ext
+        state: present
+
+    - name: Khởi động dịch vụ IIS
+      win_service:
+        name: W3SVC
+        state: started
+        start_mode: auto
+
+    # Cài Chocolatey
+    - name: Cài đặt Chocolatey nếu chưa có
+      win_command: >
+        powershell -NoProfile -ExecutionPolicy Bypass -Command
+        "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) }"
+      args:
+        creates: C:\ProgramData\chocolatey\bin\choco.exe
+
+    # Cài Nginx qua Chocolatey
+    - name: Cài đặt Nginx bằng Chocolatey
+      win_chocolatey:
+        name: nginx
+        state: present
+
+    # Đảm bảo nginx đã giải nén 
+    - name: Chạy chocolateyInstall.ps1 để hoàn tất cài đặt nginx nếu cần
+      win_shell: powershell.exe -ExecutionPolicy Bypass -File "C:\ProgramData\chocolatey\lib\nginx\tools\chocolateyInstall.ps1"
+      args:
+        creates: C:\tools\nginx\nginx.exe
+
+    # Dừng và xóa dịch vụ Nginx cũ nếu có
+    - name: Dừng dịch vụ Nginx nếu đang chạy
+      win_service:
+        name: nginx
+        state: stopped
+      ignore_errors: true
+
+    - name: Xóa dịch vụ Nginx nếu đã tồn tại
+      win_command: powershell -Command "if (Get-Service nginx -ErrorAction SilentlyContinue) { sc.exe delete nginx }"
+      ignore_errors: true
+
+    - name: Chờ dịch vụ xóa hoàn toàn
+      win_shell: Start-Sleep -Seconds 5
+
+    # Tạo lại dịch vụ Nginx với đường dẫn đúng
+    - name: Tạo dịch vụ Nginx
+      win_command: >
+        sc.exe create nginx binPath= "C:\tools\nginx\nginx.exe" start= auto
+      args:
+        creates: C:\tools\nginx\nginx.exe
+
+    # Cấu hình nginx (load balancer)
+    - name: Cấu hình Nginx làm Load Balancer
+      win_template:
+        src: nginx.conf.j2
+        dest: C:\tools\nginx\conf\nginx.conf
+      notify:
+        - Restart Nginx
+
+    # Khởi động dịch vụ Nginx
+    - name: Khởi động dịch vụ Nginx
+      win_service:
+        name: nginx
+        state: started
+        start_mode: auto
+
+    # Bật cập nhật Windows
+    - name: Bật dịch vụ cập nhật Windows
+      win_service:
+        name: wuauserv
+        state: started
+        start_mode: auto
+
+    - name: Kiểm tra cập nhật Windows
+      win_command: >
+        powershell -Command "(New-Object -ComObject Microsoft.Update.AutoUpdate).DetectNow()"
+
+  handlers:
+    - name: Restart Nginx
+      win_service:
+        name: nginx
+        state: restarted
+

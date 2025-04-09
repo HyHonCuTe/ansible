@@ -1,0 +1,13 @@
+---
+- import_tasks: get_features.yml
+  when: "'get_features' in webserver_tasks"
+
+- import_tasks: install_iis.yml
+  when: "'install_iis' in webserver_tasks"
+
+- import_tasks: deploy_site.yml
+  when: "'deploy_site' in webserver_tasks"
+
+- import_tasks: check_site.yml
+  when: "'check_site' in webserver_tasks"
+

@@ -1,0 +1,15 @@
+---
+- name: Patching Windows Server
+  hosts: win_server
+  gather_facts: yes
+  roles:
+    - role: patchingwin
+  tags: patch_windows
+
+
+- name: Patching Linux Server
+  hosts: linux_server
+  gather_facts: yes
+  roles:
+    - role: patchingwin
+  tags: patch_linux

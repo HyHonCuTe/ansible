@@ -1,0 +1,18 @@
+---
+- name: Tạo thư mục web
+  win_file:
+    path: C:\inetpub\ansible_site
+    state: directory
+
+- name: Copy file index.html
+  win_copy:
+    src: index.html
+    dest: C:\inetpub\ansible_site\index.html
+
+- name: Tạo Website IIS mới
+  win_iis_website:
+    name: AnsibleSite
+    state: started
+    port: 8080
+    physical_path: C:\inetpub\ansible_site
+
