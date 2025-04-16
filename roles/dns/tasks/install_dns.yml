@@ -1,0 +1,33 @@
+---
+
+
+    - name: Cài đặt tính năng DNS Server
+      win_feature:
+        name: DNS
+        state: present
+      register: dns_feature_result
+
+    - name: Khởi động lại máy nếu yêu cầu (nếu cần reboot sau khi cài DNS)
+      win_reboot:
+      when: dns_feature_result.reboot_required
+
+    - name: Đợi máy sẵn sàng sau reboot (nếu có)
+      wait_for_connection:
+        timeout: 300
+      when: dns_feature_result.reboot_required
+
+    # ================== PHẦN KIỂM TRA DỊCH VỤ DNS ==================
+
+    - name: Kiểm tra trạng thái dịch vụ DNS (chỉ lấy đúng tên dịch vụ DNS)
+      win_shell: |
+        (Get-Service -Name "DNS").Status
+      register: dns_status
+
+    - name: Hiển thị trạng thái DNS service
+      debug:
+        msg: "Trạng thái DNS service: {{ dns_status.stdout.strip() }}"
+
+    - name: Dừng nếu DNS chưa sẵn sàng
+      fail:
+        msg: "Dịch vụ DNS chưa khởi động ({{ dns_status.stdout.strip() }}), không thể tiếp tục"
+      when: dns_status.stdout.strip() != "Running"

@@ -1,0 +1,14 @@
+- name: Cài đặt vai trò DNS
+  import_tasks: install_dns.yml
+
+- name: Tạo forward DNS zone
+  import_tasks: create_forward_zone.yml
+
+- name: Tạo reverse DNS zone
+  import_tasks: create_reverse_zone.yml
+
+- name: Thêm bản ghi DNS
+  import_tasks: add_dns_records.yml
+
+- name: Xóa DNS cache
+  import_tasks: flush_dns_cache.yml

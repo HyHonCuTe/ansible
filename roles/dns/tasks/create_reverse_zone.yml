@@ -1,0 +1,23 @@
+---
+
+- name: Kiểm tra xem reverse lookup zone đã tồn tại chưa
+  ansible.windows.win_shell: |
+    $ZoneName = "{{ dns_reverse_zone }}"
+    try {
+      Get-DnsServerZone -Name $ZoneName -ErrorAction Stop
+      Write-Output "Zone exists"
+    }
+    catch {
+      Write-Output "Zone does not exist"
+    }
+  register: reverse_zone_check
+  changed_when: false
+
+- name: Tạo reverse lookup zone
+  ansible.windows.win_dns_zone:
+    name: "{{ dns_reverse_zone }}"
+    type: "{{ dns_zone_parameters.zone_type }}"
+    replication: "{{ dns_zone_parameters.replication | default(omit) }}"  # Tự động bỏ qua nếu không tồn tại
+    dynamic_update: "None"
+    state: present
+  when: "'Zone does not exist' in reverse_zone_check.stdout"

@@ -1,0 +1,2 @@
+- name: Xóa DNS cache để áp dụng thay đổi
+  win_command: ipconfig /flushdns

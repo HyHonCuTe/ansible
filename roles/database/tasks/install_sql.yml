@@ -1,0 +1,84 @@
+- name: Tạo thư mục tạm để chứa installer
+  win_file:
+    path: C:\temp\SQL2019
+    state: directory
+
+- name: Kiểm tra sự tồn tại của tệp SQL2019-SSEI-Expr.exe
+  win_stat:
+    path: C:\temp\SQL2019\SQL2019-SSEI-Expr.exe
+  register: ssei_dev_file_status
+
+- name: In thông tin về tệp SQL2019-SSEI-Expr.exe
+  debug:
+    var: ssei_dev_file_status
+
+- name: Copy SQL installer (SSEI Expr) từ máy Ansible lên máy Windows
+  win_copy:
+    src: SQL2019-SSEI-Expr.exe  # Đảm bảo file này tồn tại trên máy Ansible
+    dest: C:\temp\SQL2019\SQL2019-SSEI-Expr.exe
+  when: not ssei_dev_file_status.stat.exists
+
+- name: Tải toàn bộ installer về offline
+  win_command: >
+    C:\temp\SQL2019\SQL2019-SSEI-Expr.exe /Action=Download /MediaPath="C:\temp\SQL2019" /Language=en-us
+  args:
+    creates: C:\temp\SQL2019\setup.exe  # Bỏ qua nếu setup.exe đã tồn tại
+  register: download_result
+  failed_when: download_result.rc != 0 or "ERROR" in download_result.stderr
+  async: 3600  # Cho phép tải xuống chạy tối đa 1 giờ
+  poll: 30     # Kiểm tra trạng thái mỗi 30 giây
+
+- name: In kết quả lệnh tải xuống
+  debug:
+    var: download_result
+
+- name: Kiểm tra các tệp trong C:\temp\SQL2019
+  win_shell: dir C:\temp\SQL2019
+  register: dir_result
+
+- name: In danh sách tệp trong thư mục
+  debug:
+    var: dir_result.stdout
+
+- name: Kiểm tra sự tồn tại của tệp setup.exe
+  win_stat:
+    path: C:\temp\SQL2019\setup.exe
+  register: setup_file_status
+
+- name: In thông tin về tệp setup.exe
+  debug:
+    var: setup_file_status
+
+- name: Kiểm tra setup.exe trước khi cài đặt
+  fail:
+    msg: "File setup.exe không tồn tại tại C:\\temp\\SQL2019. Vui lòng kiểm tra bước tải xuống."
+  when: not setup_file_status.stat.exists
+
+- name: Cài SQL Server Express 2019 (silent mode)
+  win_command: >
+    C:\temp\SQL2019\setup.exe /Q /IACCEPTSQLSERVERLICENSETERMS /ACTION=Install
+    /FEATURES=SQLEngine /INSTANCENAME=MSSQLSERVER
+    /SECURITYMODE=SQL /SAPWD="{{ sql_sa_password }}"
+    /TCPENABLED=1 /NPENABLED=1 /SQLSVCACCOUNT="NT AUTHORITY\NETWORK SERVICE"
+  args:
+    chdir: C:\temp\SQL2019
+  register: install_result
+  failed_when: install_result.rc != 0
+  async: 7200  # Cho phép cài đặt chạy tối đa 2 giờ
+  poll: 60     # Kiểm tra trạng thái mỗi 60 giây
+
+- name: Kiểm tra dịch vụ SQL Server đã chạy chưa
+  win_service:
+    name: MSSQLSERVER
+    state: started
+  register: sql_service_status
+  ignore_errors: true
+
+- name: In trạng thái dịch vụ SQL Server
+  debug:
+    var: sql_service_status
+
+- name: Xác nhận cài đặt SQL Server 2019
+  debug:
+    msg: "SQL Server 2019 đã được cài đặt thành công và dịch vụ đang chạy."
+  when: sql_service_status.state == "running"

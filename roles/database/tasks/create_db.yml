@@ -1,0 +1,9 @@
+---
+- name: Copy SQL script to create DB
+  win_copy:
+    src: create_db.sql
+    dest: C:\temp\create_db.sql
+
+- name: Create database using sqlcmd
+  win_shell: |
+    sqlcmd -S localhost -U sa -P "YourStrong@Pass123" -i C:\temp\create_db.sql

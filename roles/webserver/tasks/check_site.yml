@@ -3,7 +3,7 @@
   win_uri:
     url: http://localhost:8080/
     method: GET
-    return_content: yes       # ✅ Phải có dòng này để trả về nội dung HTML
+    return_content: yes      
   register: web_check
 
 - name: In toàn bộ kết quả truy cập web

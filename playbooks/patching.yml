@@ -3,7 +3,7 @@
   hosts: win_server
   gather_facts: yes
   roles:
-    - role: patchingwin
+    - role: patching
   tags: patch_windows
 
 
@@ -11,5 +11,5 @@
   hosts: linux_server
   gather_facts: yes
   roles:
-    - role: patchingwin
+    - role: patching
   tags: patch_linux

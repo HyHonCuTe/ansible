@@ -1,0 +1,24 @@
+---
+# Tên zone chính
+dns_zone_name: "vodaohuyhoang.com"
+# Tên zone ngược (reverse lookup)
+dns_reverse_zone: "198.168.192.in-addr.arpa"
+# Các bản ghi DNS cho forward zone
+dns_records:
+  - name: "www"
+    type: "A"
+    value: "192.168.198.100"
+  - name: "mail"
+    type: "A"
+    value: "192.168.198.101"
+  - name: "@"  # MX Record cho root domain
+    type: "MX"
+    value: "mail.vodaohuyhoang.com."  # FQDN phải có dấu chấm cuối
+    priority: 10  # Tham số này sẽ map vào -Preference
+# Máy chủ DNS phụ (unused)
+dns_secondary_servers:
+  - "192.168.198.11"
+# Thông số DNS zones
+dns_zone_parameters:
+  zone_type: "Primary"
+  dynamic_update: "None"  # Giữ nguyên (hợp lệ)

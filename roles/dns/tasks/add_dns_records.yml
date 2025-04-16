@@ -1,0 +1,41 @@
+- name: Thêm A records vào zone thuận
+  ansible.windows.win_dns_record:
+    zone: "{{ dns_zone_name }}"
+    name: "{{ item.name }}"
+    type: "{{ item.type }}"
+    value: "{{ item.value }}"
+    state: present
+  loop: "{{ dns_records }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.type }})"
+  when: 
+    - item.type == "A"
+
+- name: Thêm MX records
+  ansible.windows.win_shell: |
+    Add-DnsServerResourceRecord `
+      -MX `
+      -ZoneName "{{ dns_zone_name }}" `
+      -Name "@" `
+      -MailExchange "{{ item.value }}" `
+      -Preference {{ item.priority }}  # Sửa -Priority → -Preference
+  loop: "{{ dns_records }}"
+  loop_control:
+    label: "MX Record for {{ item.value }}"
+  when: 
+    - item.type == "MX"
+  ignore_errors: yes
+
+    # Thêm PTR records
+- name: Thêm bản ghi PTR vào zone ngược
+  ansible.windows.win_dns_record:
+    zone: "{{ dns_reverse_zone }}"
+    name: "{{ item.value.split('.')[-1] }}"
+    type: "PTR"
+    value: "{{ item.name }}.{{ dns_zone_name }}."
+    state: present
+  loop: "{{ dns_records }}"
+  loop_control:
+    label: "PTR for {{ item.value }}"
+  when: 
+    - item.type == "A"

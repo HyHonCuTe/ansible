@@ -1,0 +1,39 @@
+---
+- name: Kiểm tra xem forward lookup zone đã tồn tại chưa
+  ansible.windows.win_powershell:
+    script: |
+      $ZoneName = "{{ dns_zone_name }}"
+      try {
+        Get-DnsServerZone -Name $ZoneName -ErrorAction Stop
+        Write-Output "Zone exists"
+      }
+      catch {
+        Write-Output "Zone does not exist"
+      }
+  register: forward_zone_check
+  changed_when: false
+
+- name: Debug trạng thái forward zone
+  ansible.builtin.debug:
+    msg: "Forward zone {{ dns_zone_name }} exists: {{ forward_zone_check.output | select('match', 'Zone exists') | length > 0 }}"
+  when: forward_zone_check is defined
+
+- name: Tạo forward lookup zone nếu chưa tồn tại
+  ansible.windows.win_dns_zone:
+    name: "{{ dns_zone_name }}"
+    type: "{{ dns_zone_parameters.zone_type | default('Primary') }}"
+    replication: "{{ dns_zone_parameters.replication | default('None') }}"
+    dynamic_update: "{{ dns_zone_parameters.dynamic_update | default('None') }}"
+    state: present
+  when: forward_zone_check.output | select('match', 'Zone does not exist') | length > 0
+
+# - name: Thêm bản ghi DNS cho forward zone
+#   ansible.windows.win_dns_record:
+#     zone: "{{ dns_zone_name }}"
+#     name: "{{ item.name }}"
+#     type: "{{ item.type }}"
+#     value: "{{ item.value }}"
+#     priority: "{{ item.priority | default(omit) }}"
+#     state: present
+#   loop: "{{ dns_records }}"
+#   when: forward_zone_check.output | select('match', 'Zone exists') | length > 0
