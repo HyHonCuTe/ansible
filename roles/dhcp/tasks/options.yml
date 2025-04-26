@@ -1,0 +1,18 @@
+- name: Set Global DHCP Options
+  ansible.windows.win_dhcp_option:
+    options:
+      - id: 6
+        value: "{{ global_dns_servers }}"
+        type: "ipaddress"
+
+- name: Set Scope-Specific Options
+  ansible.windows.win_dhcp_option:
+    scope_id: "{{ item.scope_id }}"
+    options:
+      - id: 3
+        value: "{{ item.gateway }}"
+        type: "ipaddress"
+      - id: 15
+        value: "{{ item.domain }}"
+        type: "string"
+  loop: "{{ scope_options }}"

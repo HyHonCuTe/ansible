@@ -1,0 +1,6 @@
+---
+- name: Bật và khởi động firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    state: started
+    enabled: yes

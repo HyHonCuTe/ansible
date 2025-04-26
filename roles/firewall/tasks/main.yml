@@ -1,0 +1,19 @@
+# roles/firewall/tasks/main.yml
+---
+- name: Install firewalld
+  include_tasks: install_firewalld.yml
+
+- name: Enable and start firewalld
+  include_tasks: enable_firewalld.yml
+
+- name: Configure necessary services (SSH, HTTP, HTTPS)
+  include_tasks: configure_services.yml
+
+- name: Limit simultaneous connections from a single IP
+  include_tasks: limit_connections.yml
+
+- name: Rate limit incoming traffic
+  include_tasks: rate_limit_traffic.yml
+
+- name: Reload firewalld to apply changes
+  include_tasks: reload_firewalld.yml

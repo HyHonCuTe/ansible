@@ -1,0 +1,5 @@
+---
+- name: Cài đặt firewalld
+  ansible.builtin.yum:
+    name: firewalld
+    state: present

@@ -1,0 +1,7 @@
+- name: Create IP Reservations
+  ansible.windows.win_dhcp_reservation:
+    scope_id: "{{ item.scope }}"
+    ip: "{{ item.ip }}"
+    mac: "{{ item.mac }}"
+    name: "{{ item.name }}"
+  loop: "{{ dhcp_reservations }}"

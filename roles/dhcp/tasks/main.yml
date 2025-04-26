@@ -1,0 +1,26 @@
+- name: Include all DHCP tasks
+  include_tasks: install.yml
+  tags: install
+
+- name: Configure core DHCP
+  include_tasks: scopes.yml
+  tags: scopes
+
+- name: Set DHCP Options
+  include_tasks: options.yml
+  tags: options
+
+- name: Include Advanced Features
+  include_tasks: "{{ item }}"
+  loop:
+    - reservations.yml
+    - failover.yml
+    - policies.yml
+  tags: advanced
+
+- name: Security & Validation
+  include_tasks: "{{ item }}"
+  loop:
+    - security.yml
+    - verify.yml
+  tags: security

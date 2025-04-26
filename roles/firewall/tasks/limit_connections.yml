@@ -1,0 +1,7 @@
+---
+- name: Giới hạn tối đa 10 kết nối/phút từ mỗi IP
+  ansible.builtin.firewalld:
+    rich_rule: 'rule family="ipv4" source address="0.0.0.0/0" limit value="10/m" accept'
+    zone: public
+    permanent: yes
+    state: enabled

@@ -1,0 +1,21 @@
+---
+- name: Mở cổng SSH
+  ansible.builtin.firewalld:
+    service: ssh
+    zone: public
+    permanent: yes
+    state: enabled
+
+- name: Mở cổng HTTP
+  ansible.builtin.firewalld:
+    service: http
+    zone: public
+    permanent: yes
+    state: enabled
+
+- name: Mở cổng HTTPS
+  ansible.builtin.firewalld:
+    service: https
+    zone: public
+    permanent: yes
+    state: enabled

@@ -1,24 +1,137 @@
+# # # ---
+# # # # Tên zone chính
+# # # dns_zone_name: "vodaohuyhoang.com"
+# # # # Tên zone ngược (reverse lookup)
+# # # dns_reverse_zone: "198.168.192.in-addr.arpa"
+# # # # Các bản ghi DNS cho forward zone
+# # # dns_records:
+# # #   - name: "www"
+# # #     type: "A"
+# # #     value: "192.168.198.100"
+# # #   - name: "mail"
+# # #     type: "A"
+# # #     value: "192.168.198.101"
+# # #   - name: "@"  # MX Record cho root domain
+# # #     type: "MX"
+# # #     value: "mail.vodaohuyhoang.com."  # FQDN phải có dấu chấm cuối
+# # #     priority: 10  # Tham số này sẽ map vào -Preference
+# # # # Máy chủ DNS phụ (unused)
+# # # dns_secondary_servers:
+# # #   - "192.168.198.11"
+# # # # Thông số DNS zones
+# # # dns_zone_parameters:
+# # #   zone_type: "Primary"
+# # #   dynamic_update: "None"  # Giữ nguyên (hợp lệ)
+
+
+# # # Tên zone chính
+# # dns_zone_name: "vodaohuyhoang.com"
+
+# # # Tên zone ngược (reverse lookup)
+# # dns_reverse_zone: "198.168.192.in-addr.arpa"  # Đảm bảo đúng subnet
+
+# # # Các bản ghi DNS cho forward zone
+# # dns_records:
+# #   - name: "www"
+# #     type: "A"
+# #     value: "192.168.198.100"
+# #   - name: "mail"
+# #     type: "A"
+# #     value: "192.168.198.101"
+# #   - name: "@"  # MX Record cho root domain
+# #     type: "MX"
+# #     value: "mail.vodaohuyhoang.com."  # FQDN phải có dấu chấm cuối
+# #     priority: 10
+
+# # # Bản ghi PTR cho reverse zone
+# # reverse_records:
+# #   - ip: "192.168.198.100"
+# #     name: "www.vodaohuyhoang.com."
+# #   - ip: "192.168.198.101"
+# #     name: "mail.vodaohuyhoang.com."
+
+# # # Máy chủ DNS phụ
+# # dns_secondary_servers:
+# #   - "192.168.198.11"
+
+# # # Thông số DNS zones
+# # # dns_zone_parameters:
+# # #   zone_type: "ActiveDirectory"  # Hoặc "Primary" nếu không dùng AD
+# # #   # replication: "Domain"         # Bỏ nếu zone_type là Primary
+# # #   dynamic_update: "None"      # "None" nếu zone_type là Primary
+# # #   allow_zone_transfers: true
+# # #   zone_transfer_servers: "{{ dns_secondary_servers }}"
+
+# # dns_zone_parameters:
+# #   zone_type: "Primary"
+# #   dynamic_update: "None"  # Giữ nguyên (hợp lệ)  
+# #   allow_zone_transfers: true
+# #   zone_transfer_servers: "{{ dns_secondary_servers }}"
+
+
+# dns_zone_name: "vodaohuyhoang.com"
+
+# dns_reverse_zone: "193.168.192.in-addr.arpa"  # Cập nhật đúng subnet
+
+# dns_records:
+#   - name: "www"
+#     type: "A"
+#     value: "192.168.193.250"  # Cập nhật lại IP
+#   - name: "mail"
+#     type: "A"
+#     value: "192.168.193.250"  # Cập nhật lại IP
+#   - name: "@"
+#     type: "MX"
+#     value: "mail.vodaohuyhoang.com."
+#     priority: 10
+
+# reverse_records:
+#   - ip: "192.168.193.250"  # Cập nhật lại IP
+#     name: "www.vodaohuyhoang.com."
+#   - ip: "192.168.193.250"  # Cập nhật lại IP
+#     name: "mail.vodaohuyhoang.com."
+
+# dns_secondary_servers:
+#   - "192.168.193.11"  # Cập nhật lại IP
+
+# dns_zone_parameters:
+#   zone_type: "Primary"
+#   dynamic_update: "None"
+#   allow_zone_transfers: true
+#   zone_transfer_servers: "{{ dns_secondary_servers }}"
+# File vars.yml
 ---
-# Tên zone chính
+# Forward Zone
 dns_zone_name: "vodaohuyhoang.com"
-# Tên zone ngược (reverse lookup)
-dns_reverse_zone: "198.168.192.in-addr.arpa"
-# Các bản ghi DNS cho forward zone
+
+# Reverse Zone (Đúng subnet 192.168.193.0/24)
+dns_reverse_zone: "193.168.192.in-addr.arpa"
+
+# Bản ghi Forward
 dns_records:
   - name: "www"
     type: "A"
-    value: "192.168.198.100"
+    value: "192.168.193.250"
   - name: "mail"
     type: "A"
-    value: "192.168.198.101"
-  - name: "@"  # MX Record cho root domain
+    value: "192.168.193.250"
+  - name: "@"                   # MX Record cho root domain
     type: "MX"
-    value: "mail.vodaohuyhoang.com."  # FQDN phải có dấu chấm cuối
-    priority: 10  # Tham số này sẽ map vào -Preference
-# Máy chủ DNS phụ (unused)
+    value: "mail.vodaohuyhoang.com."
+    priority: 10
+
+# Bản ghi Reverse (PTR)
+reverse_records:
+  - ip: "192.168.193.250"       # Chỉ 1 PTR cho mỗi IP
+    name: "www.vodaohuyhoang.com."
+
+# Secondary DNS Server
 dns_secondary_servers:
-  - "192.168.198.11"
-# Thông số DNS zones
+  - "192.168.193.11"
+
+# Cấu hình Zones
 dns_zone_parameters:
   zone_type: "Primary"
-  dynamic_update: "None"  # Giữ nguyên (hợp lệ)
+  dynamic_update: "None"
+  allow_zone_transfers: true
+  zone_transfer_servers: "{{ dns_secondary_servers }}"

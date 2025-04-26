@@ -1,0 +1,127 @@
+**Lỗi "DNS name does not exist" xảy ra do một số nguyên nhân chính sau đây. Hãy làm theo từng bước để khắc phục:**
+
+---
+
+### **1. Kiểm Tra Cấu Hình DNS Client**
+Đảm bảo máy client **trỏ đến đúng DNS Server** (IP: `192.168.193.250`).
+
+#### **Trên client (PowerShell):**
+```powershell
+# Kiểm tra DNS Server được cấu hình
+Get-DnsClientServerAddress -InterfaceAlias "Ethernet0" -AddressFamily IPv4
+
+# Kết quả mong đợi:
+InterfaceAlias  ServerAddresses
+--------------  ---------------
+Ethernet0       {192.168.193.250}
+```
+
+#### **Sửa nếu client trỏ sai DNS Server:**
+```powershell
+# Đặt lại DNS Server
+Set-DnsClientServerAddress -InterfaceAlias "Ethernet0" -ServerAddresses "192.168.193.250"
+```
+
+---
+
+### **2. Kiểm Tra NS Record và A Record cho DNS Server**
+#### **Bước 1: Xác nhận NS record trỏ đến FQDN của DNS Server**
+```powershell
+# Trên DNS Server
+Get-DnsServerResourceRecord -ZoneName "vodaohuyhoang.com" -RRType NS
+
+# Kết quả mong đợi:
+HostName RecordType Timestamp            TimeToLive RecordData
+-------- ---------- ---------            ---------- ----------
+@        NS         0                    01:00:00   ns1.vodaohuyhoang.com.
+```
+
+#### **Bước 2: Thêm A Record cho `ns1.vodaohuyhoang.com` (nếu chưa có)**
+```powershell
+Add-DnsServerResourceRecordA -ZoneName "vodaohuyhoang.com" -Name "ns1" -IPv4Address "192.168.193.250"
+```
+
+---
+
+### **3. Kiểm Tra Kết Nối Mạng và Firewall**
+#### **Trên client (PowerShell):**
+```powershell
+# Kiểm tra kết nối đến DNS Server qua port 53
+Test-NetConnection -ComputerName "192.168.193.250" -Port 53
+
+# Kết quả mong đợi:
+TcpTestSucceeded : True
+```
+
+#### **Mở port 53 trên DNS Server (nếu bị chặn):**
+```powershell
+# Cho phép kết nối DNS qua firewall
+New-NetFirewallRule -DisplayName "Allow DNS" -Direction Inbound -Protocol TCP -LocalPort 53 -Action Allow
+New-NetFirewallRule -DisplayName "Allow DNS" -Direction Inbound -Protocol UDP -LocalPort 53 -Action Allow
+```
+
+---
+
+### **4. Xóa DNS Cache**
+#### **Trên DNS Server:**
+```powershell
+Clear-DnsServerCache
+```
+
+#### **Trên client:**
+```powershell
+Clear-DnsClientCache
+```
+
+---
+
+### **5. Kiểm Tra Lại Bản Ghi A và Zone**
+#### **Trên DNS Server:**
+```powershell
+# Kiểm tra lại bản ghi A cho www
+Get-DnsServerResourceRecord -ZoneName "vodaohuyhoang.com" -Name "www" -RRType A
+
+# Kiểm tra zone có được load chính xác
+Get-DnsServerZone -Name "vodaohuyhoang.com" | Select-Object ZoneType, IsDsIntegrated, State
+```
+
+**Kết quả mong đợi:**
+```
+ZoneType        IsDsIntegrated State
+--------        -------------- -----
+Primary         False          Loaded
+```
+
+---
+
+### **6. Thử Phân Giải Tên Miền Từ Client**
+```powershell
+Resolve-DnsName "www.vodaohuyhoang.com" -Server "192.168.193.250" | Select-Object IPAddress
+```
+
+**Kết quả mong đợi:**
+```
+IPAddress
+---------
+192.168.193.250
+```
+
+---
+
+### **Tóm Tắt Nguyên Nhân và Giải Pháp**
+| Nguyên Nhân                          | Giải Pháp                                                                 |
+|--------------------------------------|---------------------------------------------------------------------------|
+| Client trỏ sai DNS Server           | Cấu hình client trỏ đến `192.168.193.250`                                |
+| NS Record thiếu hoặc sai            | Thêm NS record trỏ đến `ns1.vodaohuyhoang.com` và A record tương ứng     |
+| Firewall chặn port 53               | Mở port 53 (TCP/UDP) trên DNS Server                                     |
+| Cache DNS lỗi                       | Xóa cache DNS trên cả server và client                                   |
+
+**Chạy lại playbook Ansible để đảm bảo cấu hình đầy đủ:**
+```bash
+ansible-playbook playbook.yml --tags "dns_records"
+```
+
+**Lưu Ý:**  
+- Đảm bảo tất cả các bản ghi (A, NS, PTR) đã được tạo đúng.  
+- Nếu sử dụng môi trường **workgroup**, không cần tích hợp AD.  
+- Kiểm tra kết nối mạng giữa client và DNS Server.

@@ -1,0 +1,8 @@
+- name: Configure DHCP Failover
+  ansible.windows.win_shell: |
+    Add-DhcpServerv4Failover `
+      -Name "{{ failover_config.name }}" `
+      -PartnerServer "{{ failover_config.partner }}" `
+      -ScopeId "{{ failover_config.scope }}" `
+      -SharedSecret "{{ failover_config.secret }}" `
+      -LoadBalancePercent "{{ failover_config.load_balance }}"

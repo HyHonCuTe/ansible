@@ -1,0 +1,19 @@
+# Biến mẫu - Điều chỉnh theo môi trường
+dhcp_scopes:
+  - name: "Corporate_LAN"
+    start_range: "192.168.193.50"
+    end_range: "192.168.193.200"
+    subnet_mask: "255.255.255.0"
+
+dhcp_reservations:
+  - scope: "192.168.193.0"
+    ip: "192.168.198.150"
+    mac: "00-15-5D-01-23-45"
+    name: "Conference_Room_Printer"
+
+failover_config:
+  name: "DHCP_Failover_Primary"
+  partner: "dhcp2.corp.local"
+  scope: "192.168.193.0"
+  secret: "SecurePass123!"
+  load_balance: 60

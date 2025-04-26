@@ -1,0 +1,7 @@
+---
+- name: Giới hạn 1 gói tin mỗi giây
+  ansible.builtin.firewalld:
+    rich_rule: 'rule family="ipv4" source address="0.0.0.0/0" limit value="1/s" accept'
+    zone: public
+    permanent: yes
+    state: enabled

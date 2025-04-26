@@ -1,0 +1,4 @@
+- name: Restart DHCP Service
+  ansible.windows.win_service:
+    name: dhcpserver
+    state: restarted

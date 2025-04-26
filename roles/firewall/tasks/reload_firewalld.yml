@@ -1,0 +1,12 @@
+---
+- name: Reload firewalld
+  ansible.builtin.command: firewall-cmd --reload
+
+- name: Kiểm tra toàn bộ trạng thái firewall
+  ansible.builtin.command: firewall-cmd --list-all-zones
+  register: ket_qua_firewall
+
+- name: Hiển thị kết quả firewall
+  ansible.builtin.debug:
+    msg: "{{ ket_qua_firewall.stdout_lines }}"
+

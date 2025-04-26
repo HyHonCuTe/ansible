@@ -1,0 +1,9 @@
+- name: Create DHCP Policies
+  ansible.windows.win_shell: |
+    Add-DhcpServerv4Policy `
+      -Name "{{ policy.name }}" `
+      -Condition "{{ policy.condition }}" `
+      -MacAddress "{{ policy.mac_filter }}" `
+      -ScopeId "{{ policy.scope }}" `
+      -LeaseDuration "{{ policy.lease_time }}"
+  loop: "{{ dhcp_policies }}"

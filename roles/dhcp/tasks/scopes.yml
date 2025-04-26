@@ -1,0 +1,18 @@
+- name: Create DHCP Scopes
+  ansible.windows.win_dhcp_scope:
+    name: "{{ item.name }}"
+    start_range: "{{ item.start_range }}"
+    end_range: "{{ item.end_range }}"
+    subnet_mask: "{{ item.subnet_mask }}"
+    state: present
+  loop: "{{ dhcp_scopes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Configure Scope Exclusions
+  ansible.windows.win_shell: |
+    Add-DhcpServerv4ExclusionRange `
+      -ScopeId "{{ item.scope_id }}" `
+      -StartRange "{{ item.ex_start }}" `
+      -EndRange "{{ item.ex_end }}"
+  loop: "{{ dhcp_exclusions }}"
