@@ -67,3 +67,20 @@
   debug:
     msg: "Backup toàn bộ hệ thống đã hoàn tất trên {{ inventory_hostname }} vào {{ ansible_date_time.iso8601 }}."
   when: backup_file_stat.stat.exists
+
+
+- name:  Tim kiếm các file backup cũ hơn 7 ngày
+  find:
+    paths: "/home/server_ansible/ansible/roles/backup/files/{{ inventory_hostname }}/"
+    age: "7d"
+    age_stamp: mtime
+    patterns: "*.tar.gz"
+  register: files_to_delete
+  delegate_to: localhost
+
+- name: Xóa file backup cũ hơn 7 ngày
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ files_to_delete.files }}"
+  delegate_to: localhost
