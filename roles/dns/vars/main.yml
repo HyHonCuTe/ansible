@@ -109,6 +109,8 @@ dns_reverse_zone: "193.168.192.in-addr.arpa"
 
 # Bản ghi Forward
 dns_records:
+  - { name: "dc", type: "A", value: "192.168.193.250" }
+  - { name: "ns1", type: "A", value: "192.168.193.250" }
   - name: "www"
     type: "A"
     value: "192.168.193.250"

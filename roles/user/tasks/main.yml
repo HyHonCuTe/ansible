@@ -1,0 +1,35 @@
+- name: Tạo user mới
+  user:
+    name: "{{ username }}"
+    comment: "User created by Ansible"
+    shell: "/bin/bash"
+    state: present
+
+- name: Cập nhật SSH key cho user
+  authorized_key:
+    user: "{{ username }}"
+    state: present
+    key: "{{ lookup('file', ssh_key_path) }}"  # Đảm bảo đường dẫn đúng
+
+- name: Thêm user vào nhóm wheel (nếu nhóm sudo không tồn tại)
+  user:
+    name: "{{ username }}"
+    groups: "wheel"  # Thêm user vào nhóm wheel thay vì sudo
+    append: yes
+    state: present
+
+- name: Cập nhật quyền sudo cho user
+  copy:
+    content: "{{ username }} ALL=(ALL) NOPASSWD: ALL"
+    dest: "/etc/sudoers.d/{{ username }}"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Liệt kê tất cả các user
+  command: getent passwd
+  register: users_list
+
+- name: Hiển thị danh sách user
+  debug:
+    var: users_list.stdout_lines
+

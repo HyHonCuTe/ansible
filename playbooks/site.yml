@@ -39,7 +39,7 @@
   roles:
     - role: database
       become: false
-  tags: install_sql
+  tags: install_database
 
 
 - name: Cài DNS Server trên Windows
@@ -71,6 +71,27 @@
       become: true
   tags:
     - install_firewall
+
+- name: Cai user
+  hosts: linux_server
+  gather_facts: true
+  roles:
+    - role: user
+      become: true
+  tags:
+    - install_user  
+
+- name: Cài đặt Backup
+  hosts: linux_servers
+  gather_facts: true
+  roles:
+    - role: backup
+      become: true
+  tags:
+    - install_backup
+
+
+
 
 
 

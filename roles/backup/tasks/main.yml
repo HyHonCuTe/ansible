@@ -1,0 +1,69 @@
+- name: Kiểm tra các biến hostname
+  debug:
+    msg: "inventory_hostname: {{ inventory_hostname }}"
+
+- name: Tạo thư mục backup nếu chưa có trên control node
+  file:
+    path: "/home/server_ansible/ansible/roles/backup/files/{{ inventory_hostname }}" 
+    state: directory
+    mode: '0755'
+    owner: "server_ansible"
+  delegate_to: localhost
+
+- name: Kiểm tra dung lượng đĩa
+  command: df -h /home/server_ansible/ansible/roles/backup/files/
+  register: disk_space
+  delegate_to: localhost
+
+- name: Hiển thị dung lượng đĩa
+  debug:
+    msg: "{{ disk_space.stdout }}"
+
+
+- name: Tạo file backup trên máy target
+  archive:
+    path:
+      - /etc        # Cấu hình hệ thống
+      - /home       # Dữ liệu người dùng
+      - /var/log    # Log hệ thống
+    dest: "/tmp/backup_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':', '-') }}.tar.gz"
+    format: gz
+  become: true
+  register: archive_result
+
+
+- name: Lấy file backup về control node
+  fetch:
+    src: "{{ archive_result.dest }}"
+    dest: "/home/server_ansible/ansible/roles/backup/files/{{ inventory_hostname }}/"
+    flat: yes
+  register: fetch_result
+
+- name: Xóa file backup tạm trên máy target
+  file:
+    path: "{{ archive_result.dest }}"
+    state: absent
+  become: true
+
+- name: Kiểm tra file backup
+  stat:
+    path: "/home/server_ansible/ansible/roles/backup/files/{{ inventory_hostname }}/backup_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':', '-') }}.tar.gz"
+  register: backup_file_stat
+  delegate_to: localhost
+
+- name: Kiểm tra kết quả sao lưu
+  debug:
+    msg: "Backup file created: {{ backup_file_stat.stat.path }} with size {{ backup_file_stat.stat.size }} bytes"
+  when: backup_file_stat.stat.exists
+
+- name: Lưu kết quả sao lưu vào log
+  copy:
+    content: "Backup file: {{ backup_file_stat.stat.path }} size: {{ backup_file_stat.stat.size }} bytes"
+    dest: "/home/server_ansible/ansible/roles/backup/files/{{ inventory_hostname }}/backup_log.txt"
+  when: backup_file_stat.stat.exists
+  delegate_to: localhost
+
+- name: Thông báo hoàn thành sao lưu
+  debug:
+    msg: "Backup toàn bộ hệ thống đã hoàn tất trên {{ inventory_hostname }} vào {{ ansible_date_time.iso8601 }}."
+  when: backup_file_stat.stat.exists

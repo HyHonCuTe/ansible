@@ -1,0 +1,5 @@
+# vars/main.yml
+sql_server_version: "2019"
+sa_password: "Aa123"  # Thay đổi mật khẩu này
+sql_installer: "SQL2019-SSEI-Expr.exe"  # Tên file cài đặt
+install_dir: "C:\\SQLServer"  # Thư mục cài đặt SQL Server

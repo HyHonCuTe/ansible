@@ -1,9 +1,11 @@
 ---
-- name: Copy SQL script to create DB
-  win_copy:
-    src: create_db.sql
-    dest: C:\temp\create_db.sql
+- name: Copy database creation script
+  ansible.windows.win_copy:
+    src: files/create_db.sql
+    dest: C:\SQLScripts\create_db.sql
 
-- name: Create database using sqlcmd
-  win_shell: |
-    sqlcmd -S localhost -U sa -P "YourStrong@Pass123" -i C:\temp\create_db.sql
+- name: Execute database creation script
+  ansible.windows.win_shell: |
+    sqlcmd -S localhost -U sa -P "{{ sa_password }}" -i C:\SQLScripts\create_db.sql
+  register: db_creation
+  failed_when: db_creation.rc != 0

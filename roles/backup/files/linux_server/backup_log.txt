@@ -1,0 +1,1 @@
+Backup file: /home/server_ansible/ansible/roles/backup/files/linux_server/backup_2025-05-02_12-14-41.tar.gz size: 48882030 bytes
