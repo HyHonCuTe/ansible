@@ -1,0 +1,166 @@
+; Tệp Cấu Hình Cài Đặt SQL Server 2022
+[OPTIONS]
+
+; Xác định quy trình cài đặt, như INSTALL (Cài đặt), UNINSTALL (Gỡ cài đặt), hoặc UPGRADE (Nâng cấp). Đây là tham số bắt buộc.
+ACTION="Install"
+
+; Sử dụng tham số /ENU để cài đặt phiên bản tiếng Anh của SQL Server trên hệ điều hành Windows đã được địa phương hóa.
+ENU="True"
+
+; Bằng cách chỉ định tham số này và chấp nhận các điều khoản sử dụng của Microsoft R Open và Microsoft R Server, bạn xác nhận rằng bạn đã đọc và hiểu các điều khoản sử dụng.
+IACCEPTROPENLICENSETERMS="True"
+
+; Chỉ ra liệu khóa sản phẩm cung cấp có được bảo vệ bởi Dịch Vụ Đảm Bảo (Service Assurance) hay không.
+PRODUCTCOVEREDBYSA="False"
+
+; Xác định rằng SQL Server Setup sẽ không hiển thị thông báo về chính sách quyền riêng tư khi chạy từ dòng lệnh.
+SUPPRESSPRIVACYSTATEMENTNOTICE="True"
+
+; Cài đặt sẽ không hiển thị giao diện người dùng.
+QUIET="True"
+
+; Cài đặt sẽ chỉ hiển thị tiến trình mà không có sự tương tác của người dùng.
+QUIETSIMPLE="False"
+
+; Tham số điều khiển hành vi giao diện người dùng. Các giá trị hợp lệ là Normal cho giao diện đầy đủ, AutoAdvance cho giao diện đơn giản, và EnableUIOnServerCore để bỏ qua sự chặn giao diện GUI trên Server Core.
+; UIMODE="Normal"
+
+; Chỉ định liệu SQL Server Setup có phát hiện và bao gồm các bản cập nhật sản phẩm hay không. Các giá trị hợp lệ là True và False hoặc 1 và 0. Mặc định, SQL Server Setup sẽ bao gồm các bản cập nhật tìm thấy.
+UpdateEnabled="False"
+
+; Nếu tham số này được cung cấp, thì máy tính này sẽ sử dụng Microsoft Update để kiểm tra các bản cập nhật.
+USEMICROSOFTUPDATE="False"
+
+; Xác định rằng SQL Server Setup sẽ không hiển thị thông báo phiên bản trả phí khi chạy từ dòng lệnh.
+SUPPRESSPAIDEDITIONNOTICE="True"
+
+; Xác định các tính năng để cài đặt, gỡ cài đặt hoặc nâng cấp. Các tính năng cấp cao bao gồm SQL, AS, IS, MDS, và Tools. Tính năng SQL sẽ cài đặt Động Cơ Cơ Sở Dữ Liệu, Sao Chép, Toàn Văn, và Dịch Vụ Chất Lượng Dữ Liệu (DQS) trên máy chủ.
+FEATURES=SQL
+
+; Hiển thị cách sử dụng các tham số dòng lệnh.
+HELP="False"
+
+; Xác định rằng nhật ký cài đặt chi tiết sẽ được đưa vào bảng điều khiển.
+INDICATEPROGRESS="False"
+
+; Xác định tên hoặc tên miền mặc định cho SQL Server. MSSQLSERVER là tên miền mặc định cho các phiên bản không phải Express và SQLExpress cho phiên bản Express.
+INSTANCENAME=MSSQLSERVER
+
+; Xác định thư mục cài đặt gốc cho các thành phần chia sẻ.
+INSTALLSHAREDDIR="C:\Program Files\Microsoft SQL Server"
+
+; Xác định thư mục cài đặt gốc cho các thành phần chia sẻ WOW64.
+INSTALLSHAREDWOWDIR="C:\Program Files (x86)\Microsoft SQL Server"
+
+; Xác định ID thể hiện cho các tính năng SQL Server bạn đã chỉ định.
+INSTANCEID="MSSQLSERVER"
+
+; Loại khởi động cho dịch vụ SQL Server CEIP.
+SQLTELSVCSTARTUPTYPE="Automatic"
+
+; Tài khoản cho dịch vụ SQL Server CEIP: Tài khoản miền/User hoặc tài khoản hệ thống.
+; SQLTELSVCACCT="NT Service\SQLTELEMETRY"
+
+; Xác định thư mục cài đặt.
+INSTANCEDIR="C:\Program Files\Microsoft SQL Server"
+
+; Tên tài khoản của dịch vụ Agent.
+AGTSVCACCOUNT="NT Service\SQLSERVERAGENT"
+
+; Tự động khởi động dịch vụ sau khi cài đặt.
+AGTSVCSTARTUPTYPE="Automatic"
+
+; Loại khởi động cho dịch vụ SQL Server.
+SQLSVCSTARTUPTYPE="Automatic"
+
+; Cài đặt để cho phép RANU cho SQL Server Express (chỉ dùng cho SQL Server Express).
+ENABLERANU="False"
+
+; Cung cấp tài khoản người dùng hiện tại làm quản trị viên hệ thống Database Engine cho SQL Server Express.
+ADDCURRENTUSERASSQLADMIN="False"
+
+; Chỉ định 0 để tắt hoặc 1 để bật giao thức TCP/IP.
+TCPENABLED="1"
+
+; Chỉ định 0 để tắt hoặc 1 để bật giao thức Named Pipes.
+NPENABLED="0"
+
+; Loại khởi động cho Dịch Vụ Trình Duyệt (Browser Service).
+BROWSERSVCSTARTUPTYPE="Disabled"
+
+; Loại khởi động cho Dịch Vụ Telemetry.
+ISTELSVCSTARTUPTYPE="Automatic"
+
+; Mức độ để bật tính năng FILESTREAM (0, 1, 2 hoặc 3).
+FILESTREAMLEVEL="0"
+
+; Mức độ tối đa của các phép song song (MAXDOP) trong cấu hình máy chủ.
+SQLMAXDOP="4"
+
+; Cung cấp tài khoản người dùng hiện tại làm quản trị viên hệ thống Database Engine cho SQL Server Express.
+ENABLERANU="False"
+
+; Xác định bộ so sánh (collation) Windows hoặc SQL để sử dụng cho Động Cơ Cơ Sở Dữ Liệu.
+SQLCOLLATION="SQL_Latin1_General_CP1_CI_AS"
+
+; Tài khoản cho dịch vụ SQL Server: Tài khoản miền/User hoặc tài khoản hệ thống.
+SQLSVCACCOUNT="NT Service\MSSQLSERVER"
+
+SQLSVCINSTANTFILEINIT="True"
+
+; Các tài khoản Windows để cung cấp quyền quản trị viên hệ thống cho SQL Server.
+SQLSYSADMINACCOUNTS="Administrator"
+
+; Mặc định là Windows Authentication. Sử dụng "SQL" cho Mixed Mode Authentication.
+SECURITYMODE="SQL"
+
+; Số lượng tệp TempDB cho Động Cơ Cơ Sở Dữ Liệu.
+SQLTEMPDBFILECOUNT=4
+
+; Xác định kích thước ban đầu của tệp dữ liệu TempDB Động Cơ Cơ Sở Dữ Liệu tính theo MB.
+SQLTEMPDBFILESIZE=256
+
+; Xác định mức độ tăng trưởng tự động của mỗi tệp dữ liệu TempDB trong MB.
+SQLTEMPDBFILEGROWTH=64
+
+; Xác định kích thước ban đầu của tệp nhật ký TempDB Động Cơ Cơ Sở Dữ Liệu tính theo MB.
+SQLTEMPDBLOGFILESIZE=64
+
+; Xác định mức độ tăng trưởng tự động của tệp nhật ký TempDB Động Cơ Cơ Sở Dữ Liệu trong MB.
+SQLTEMPDBLOGFILEGROWTH=64
+
+; Thư mục cho tệp TempDB Động Cơ Cơ Sở Dữ Liệu.
+SQLTEMPDBDIR="C:\SQLDATA"
+
+SQLTEMPDBLOGDIR="C:\SQLDATA"
+
+; Thư mục gốc dữ liệu cho Động Cơ Cơ Sở Dữ Liệu.
+INSTALLSQLDATADIR="C:\MSSQL16.MSSQLSERVER"
+
+; Thư mục mặc định cho các tệp sao lưu của Động Cơ Cơ Sở Dữ Liệu.
+SQLBACKUPDIR="C:\SQL_BACKUP"
+
+; Thư mục mặc định cho cơ sở dữ liệu người dùng của Động Cơ Cơ Sở Dữ Liệu.
+SQLUSERDBDIR="C:\MSSQL16.MSSQLSERVER\MSSQL\DATA"
+
+; Thư mục mặc định cho các tệp nhật ký cơ sở dữ liệu người dùng của Động Cơ Cơ Sở Dữ Liệu.
+SQLUSERDBLOGDIR="C:\MSSQL16.MSSQLSERVER\MSSQL\LOG"
+
+; Cung cấp tài khoản người dùng hiện tại làm quản trị viên hệ thống Database Engine cho SQL Server 2022 Express.
+; Tài khoản dịch vụ của SQL Server.
+FTSVCACCOUNT="NT Service\MSSQLFDLauncher"
+IAcceptSQLServerLicenseTerms="True"
+
+ADDCURRENTUSERASSQLADMIN="False"
+
+; Chỉ định 0 để tắt hoặc 1 để bật giao thức Named Pipes.
+NPENABLED="0"
+
+; Loại khởi động cho Dịch Vụ Trình Duyệt (Browser Service).
+BROWSERSVCSTARTUPTYPE="Disabled"
+
+; Dùng SQLMAXMEMORY để giảm thiểu rủi ro về áp lực bộ nhớ cho hệ điều hành.
+SQLMAXMEMORY="2147483647"
+
+; Dùng SQLMINMEMORY để dự trữ một lượng bộ nhớ tối thiểu cho SQL Server Memory Manager.
+SQLMINMEMORY="0"

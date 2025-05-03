@@ -1,36 +1,73 @@
-- name: Check if SQL Server is already installed
+- name: Kiểm tra xem dịch vụ MSSQLSERVER có tồn tại không
   ansible.windows.win_service:
     name: 'MSSQLSERVER'
   register: service_info
 
-- name: End play if SQL Server is already installed
+- name: Kết thúc play nếu dịch vụ MSSQLSERVER đã tồn tại
   ansible.builtin.meta: end_play
   when: service_info.exists
 
-- name: Create temp folder on target machine
+- name: Tạo thư mục tạm thời trên máy mục tiêu
   ansible.windows.win_file:
-    path: 'C:\temp'
+    path: 'C:\\temp'
     state: directory
+  when:
+    - not service_info.exists
 
-- name: Set Windows power plan to high performance
-  community.windows.win_power_plan:
-    name: high performance
+- name: Kiểm tra xem file SQLServer2022-x64-ENU.iso có tồn tại không
+  win_stat:
+    path: C:\\temp\\SQLServer2022-x64-ENU.iso
+  register: file_check
 
-- name: Copy SQL Server installer (SSEI) to target machine
+- name: In ra đường dẫn nếu file tồn tại
+  debug:
+    msg: "File tồn tại tại: {{ file_check.stat.path }}"
+  when: file_check.stat.exists
+
+- name: Sao chép file ISO vào máy mục tiêu
   ansible.windows.win_copy:
-    src: '/home/server_ansible/ansible/roles/database/files/SQL2019-SSEI-Expr.exe'  # Đảm bảo file .exe có sẵn trên máy controller
-    dest: 'C:\temp\SQL2019-SSEI-Expr.exe'
+    src: '/home/server_ansible/ansible/roles/database/files/SQLServer2022-x64-ENU.iso'
+    dest: 'C:\\temp\\'
+  when:
+    - not file_check.stat.exists
 
-- name: Copy configuration file to target machine
+- name: Sao chép file cấu hình Configuration.ini vào máy mục tiêu
   ansible.builtin.template:
-    src: './config2019.j2'  # Đảm bảo file cấu hình không có mật khẩu và sử dụng Windows Authentication
-    dest: 'C:\temp\Configuration.ini'
+    src: '/home/server_ansible/ansible/roles/database/files/config2022.j2'
+    dest: 'C:\\temp\\Configuration.ini'
+  when:
+    - not service_info.exists
 
-- name: Run SQL Server installer
+- name: Gắn file ISO vào ổ đĩa
+  community.windows.win_disk_image:
+    image_path: 'C:\\temp\\SQLServer2022-x64-ENU.iso'
+    state: present
+  register: disk_image_out
+  when:
+    - not service_info.exists
+
+- name: Đặt mật khẩu SA cho SQL Server
+  ansible.builtin.set_fact:
+    sa_password_switch: "{{ '/SAPWD={{ sql_password }}' }}"
+  when:
+    - not service_info.exists
+
+- name: Cài đặt instance mặc định của SQL Server
   ansible.windows.win_command:
-    cmd: 'C:\temp\SQL2019-SSEI-Expr.exe /ConfigurationFile=C:\temp\Configuration.ini'
+    cmd: '{{ disk_image_out.mount_paths[0] }}setup.exe /ConfigurationFile=C:\\temp\\Configuration.ini {{ sa_password_switch }}'
+  when:
+    - not service_info.exists
 
-- name: Cleanup temp directory
-  ansible.windows.win_file:
-    path: 'C:\temp'
-    state: absent
+# - name: Dỡ bỏ mount file ISO
+#   community.windows.win_disk_image:
+#     image_path: 'C:\\temp\\SQLServer2022-x64-ENU.iso'
+#     state: absent
+#   when:
+#     - not service_info.exists
+
+# - name: Dọn dẹp thư mục tạm thời
+#   ansible.windows.win_file:
+#     path: 'C:\\temp'
+#     state: absent
+#   when:
+#     - not service_info.exists

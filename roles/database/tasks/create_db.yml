@@ -1,11 +1,29 @@
----
-- name: Copy database creation script
-  ansible.windows.win_copy:
-    src: files/create_db.sql
-    dest: C:\SQLScripts\create_db.sql
+- name: Kiểm tra nếu database đã tồn tại
+  win_shell: |
+    $server = "{{ sql_instance }}"
+    $database = "{{ db_name }}"
+    $connectionString = "Server=$server;Database=master;User Id={{ sql_user }};Password={{ sql_password }};"
+    $query = "IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = '$database') CREATE DATABASE $database;"
+    Invoke-Sqlcmd -ConnectionString $connectionString -Query $query
+  environment:
+    PATH: "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\;{{ ansible_env.PATH }}"
 
-- name: Execute database creation script
-  ansible.windows.win_shell: |
-    sqlcmd -S localhost -U sa -P "{{ sa_password }}" -i C:\SQLScripts\create_db.sql
-  register: db_creation
-  failed_when: db_creation.rc != 0
+# Copy file SQL từ máy control sang máy target
+- name: Copy file SQL từ máy control sang máy target
+  win_copy:
+    src: "{{ sql_file_on_control }}"  # Đường dẫn file SQL trên máy control
+    dest: "{{ sql_script_path }}"     # Đường dẫn nơi file sẽ được lưu trên máy target
+
+# Thực thi script SQL trên máy target
+- name: Thực thi script SQL trên máy target
+  win_shell: |
+    sqlcmd -S {{ sql_instance }} -U {{ sql_user }} -P {{ sql_password }} -i {{ sql_script_path }}
+  environment:
+    PATH: "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\;{{ ansible_env.PATH }}"
+
+# # Optional: Kiểm tra kết quả thực thi
+# $serverName = "localhost"  # Tên máy chủ hoặc IP của SQL Server
+# $query = "SELECT name FROM sys.databases"
+# $result = Invoke-Sqlcmd -ServerInstance $serverName -Query $query
+# $result
+

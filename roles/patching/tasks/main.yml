@@ -1,3 +1,6 @@
 ---
 - import_tasks: windows_patch.yml
   when: ansible_os_family == 'Windows'
+
+- import_tasks: linux_patch.yml
+  when: ansible_os_family != 'Windows'

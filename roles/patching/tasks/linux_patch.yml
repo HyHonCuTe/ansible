@@ -1,19 +1,28 @@
-
 - name: Cài đặt các bản cập nhật bảo mật
   package:
     name: "*"
     state: latest
+  become: yes
   when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
 
-- name: Kiểm tra và cài đặt các bản cập nhật bảo mật trên Ubuntu
-  dnf:
-    upgrade: dist
-    update_cache: yes
-  when: ansible_os_family == "Debian"
+# - name: Kiểm tra và cài đặt các bản cập nhật bảo mật trên Debian
+#   apt:
+#     upgrade: dist
+#     update_cache: yes
+#   become: yes
+#   when: ansible_os_family == "Debian"
+
+# - name: Kiểm tra và cài đặt các bản cập nhật bảo mật trên RedHat
+#   dnf:
+#     upgrade: dist
+#     update_cache: yes
+#   become: yes
+#   when: ansible_os_family == "RedHat"
 
 - name: Khởi động lại hệ thống nếu cần thiết
   reboot:
     msg: "Hệ thống cần khởi động lại sau khi cài đặt bản cập nhật."
     pre_reboot_delay: 5
     post_reboot_delay: 10
+  become: yes
   when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"

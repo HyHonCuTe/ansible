@@ -31,15 +31,15 @@
       become: false
   tags: install_web
 
-- name: Cài SQL Server Developer bằng Ansible
+- name: Cài SQL Server trên Windows
   hosts: win_server
-  vars:
-    sql_sa_password: "Aa123"
-  gather_facts: false
+  gather_facts: no
+  collections:
+    - ansible.windows
   roles:
-    - role: database
-      become: false
-  tags: install_database
+    - database
+  tags:
+    - install_database
 
 
 - name: Cài DNS Server trên Windows
@@ -53,15 +53,16 @@
     - install_dns
 
 
-- name: Cài DHCP Server trên Windows
-  hosts: win_server
-  gather_facts: yes
-  collections:
-    - ansible.windows
-  roles:
-    - dhcp
-  tags:
-    - install_dhcp
+# - name: Cài DHCP Server trên Windows
+#   hosts: win_server
+#   gather_facts: yes
+#   collections:
+#     - ansible.windows
+#   roles:
+#     - dhcp
+#   tags:
+#     - install_dhcp
+
 
 - name: Cài đặt Firewall trên Linux
   hosts: linux_server

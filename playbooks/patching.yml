@@ -8,7 +8,7 @@
 
 
 - name: Patching Linux Server
-  hosts: linux_server
+  hosts: linux_servers
   gather_facts: yes
   roles:
     - role: patching

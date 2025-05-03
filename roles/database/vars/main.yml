@@ -1,5 +1,7 @@
-# vars/main.yml
-sql_server_version: "2019"
-sa_password: "Aa123"  # Thay đổi mật khẩu này
-sql_installer: "SQL2019-SSEI-Expr.exe"  # Tên file cài đặt
-install_dir: "C:\\SQLServer"  # Thư mục cài đặt SQL Server
+
+sql_instance: localhost
+sql_user: sa
+sql_password: MyStrongPassword123!  
+db_name: MyNewDatabase
+sql_script_path: C:\SQLDATA\database_setup.sql 
+sql_file_on_control: /home/server_ansible/ansible/roles/database/files/database_setup.sql
