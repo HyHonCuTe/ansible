@@ -1,12 +1,57 @@
----
-- name: Kiểm tra và cài đặt các bản cập nhật Windows
-  win_updates:
-    category_names:
-      - SecurityUpdates
-      - CriticalUpdates
-    reboot: yes
-  register: patch_result
+- name: Kiểm tra version hệ điều hành
+  win_command: systeminfo
+  register: system_info
 
-- name: Hiển thị kết quả cập nhật
-  debug:
-    var: patch_result
+- debug:
+    var: system_info.stdout_lines
+
+- name: Tạo thư mục log nếu chưa có
+  win_file:
+    path: "{{ log_dir }}"
+    state: directory
+
+- name: Ghi lại danh sách các bản vá hiện có
+  win_command: powershell.exe Get-HotFix
+  register: hotfixes
+
+- win_copy:
+    content: "{{ hotfixes.stdout }}"
+    dest: "{{ log_dir }}\\hotfix_before_patch.txt"
+
+- name: Cài module PSWindowsUpdate nếu cần
+  win_shell: |
+    Install-PackageProvider -Name NuGet -Force
+    Install-Module -Name PSWindowsUpdate -Force -AllowClobber
+  args:
+    executable: powershell.exe
+
+- name: Import module PSWindowsUpdate
+  win_shell: Import-Module PSWindowsUpdate
+  args:
+    executable: powershell.exe
+
+- name: Set execution policy only if needed
+  win_shell: |
+    $policy = Get-ExecutionPolicy -Scope Process
+    if ($policy -ne "RemoteSigned" -and $policy -ne "Unrestricted") {
+        Set-ExecutionPolicy RemoteSigned -Force
+    }
+  args:
+    executable: powershell
+
+
+- name: Cập nhật bản vá Windows
+  ansible.windows.win_updates:
+    category_names: '*'
+    reboot: true
+
+
+# - name: Cập nhật bản vá Windows với các loại cụ thể
+#   ansible.windows.win_updates:
+#     category_names:
+#       - SecurityUpdates
+#       - CriticalUpdates
+#       - UpdateRollups
+#   become: true
+#   become_method: runas
+#   become_user: SYSTEM

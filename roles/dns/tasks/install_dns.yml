@@ -1,6 +1,4 @@
 ---
-
-
     - name: Cài đặt tính năng DNS Server
       win_feature:
         name: DNS

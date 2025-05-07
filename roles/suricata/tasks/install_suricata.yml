@@ -1,7 +1,4 @@
-# - name: Install and configure Suricata on AlmaLinux
-#   hosts: all
-#   become: yes  # Chạy với quyền root
-#   tasks:
+
   
     # Cài đặt EPEL repository, cần thiết để cài Suricata
     - name: Install EPEL repository

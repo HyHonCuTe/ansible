@@ -1,28 +1,59 @@
-- name: Cài đặt các bản cập nhật bảo mật
-  package:
-    name: "*"
+- name: Hiển thị phiên bản hệ điều hành
+  command: cat /etc/os-release
+  register: os_release
+  changed_when: false
+
+- debug:
+    var: os_release.stdout_lines
+
+- name: Tạo thư mục chứa snapshot nếu chưa có
+  file:
+    path: "{{ restore_snapshot_dir }}"
+    state: directory
+    mode: 0755
+
+- name: Tạo bản sao lưu danh sách gói trước khi patch
+  shell: rpm -qa > {{ restore_snapshot_dir }}/installed_packages_before_{{ timestamp }}.txt
+
+- name: Làm mới cache DNF
+  dnf:
+    update_cache: yes
+
+- name: Kiểm tra cập nhật có sẵn (ghi log)
+  shell: dnf check-update > {{ restore_snapshot_dir }}/available_updates_{{ timestamp }}.txt || true
+
+- name: Cập nhật hệ thống
+  dnf:
+    name: '*'
     state: latest
-  become: yes
-  when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
 
-# - name: Kiểm tra và cài đặt các bản cập nhật bảo mật trên Debian
-#   apt:
-#     upgrade: dist
-#     update_cache: yes
-#   become: yes
-#   when: ansible_os_family == "Debian"
+- name: Nâng cấp hệ thống với --refresh (bổ sung)
+  command: dnf upgrade --refresh -y
 
-# - name: Kiểm tra và cài đặt các bản cập nhật bảo mật trên RedHat
-#   dnf:
-#     upgrade: dist
-#     update_cache: yes
-#   become: yes
-#   when: ansible_os_family == "RedHat"
+- name: Tự động xoá các gói không cần thiết
+  dnf:
+    autoremove: yes
 
-- name: Khởi động lại hệ thống nếu cần thiết
+- name: Giữ lại 3 phiên bản kernel gần nhất (nếu có nhiều hơn)
+  command: |
+    dnf remove -y $(dnf repoquery --installonly --latest={{ keep_kernel_versions }} --quiet --queryformat="%{name}-%{version}-%{release}.%{arch}" --installed --exclude=kernel | grep '^kernel')
+  when: ansible_facts.packages['kernel'] is defined and ansible_facts.packages['kernel'] | length > keep_kernel_versions
+  ignore_errors: true
+
+- name: Cài dnf-utils nếu chưa có
+  dnf:
+    name: dnf-utils
+    state: present
+
+- name: Kiểm tra nếu cần reboot
+  command: needs-restarting -r
+  register: reboot_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Reboot nếu cần thiết
   reboot:
-    msg: "Hệ thống cần khởi động lại sau khi cài đặt bản cập nhật."
-    pre_reboot_delay: 5
-    post_reboot_delay: 10
-  become: yes
-  when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+    msg: "Reboot sau khi cập nhật kernel"
+    reboot_timeout: 600
+    test_command: whoami
+  when: reboot_check.rc == 1

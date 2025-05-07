@@ -101,8 +101,14 @@
 #   zone_transfer_servers: "{{ dns_secondary_servers }}"
 # File vars.yml
 ---
+
+
+
+#33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333
 # Forward Zone
 dns_zone_name: "vodaohuyhoang.com"
+# dns_zone_name: "hyhon.com"
+
 
 # Reverse Zone (Đúng subnet 192.168.193.0/24)
 dns_reverse_zone: "193.168.192.in-addr.arpa"
@@ -120,12 +126,16 @@ dns_records:
   - name: "@"                   # MX Record cho root domain
     type: "MX"
     value: "mail.vodaohuyhoang.com."
+    # value: "mail.hyhon.com."
+
     priority: 10
 
 # Bản ghi Reverse (PTR)
 reverse_records:
   - ip: "192.168.193.250"       # Chỉ 1 PTR cho mỗi IP
     name: "www.vodaohuyhoang.com."
+    # name: "www.hyhon.com."
+
 
 # Secondary DNS Server
 dns_secondary_servers:
@@ -137,3 +147,46 @@ dns_zone_parameters:
   dynamic_update: "None"
   allow_zone_transfers: true
   zone_transfer_servers: "{{ dns_secondary_servers }}"
+
+
+
+  #33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333
+# ========== DANH SÁCH ZONES ==========
+forward_zones:
+  - name: "vodaohuyhoang.com"
+    records:
+      - { name: "dc", type: "A", value: "192.168.193.250" }
+      - { name: "ns1", type: "A", value: "192.168.193.250" }
+      - { name: "www", type: "A", value: "192.168.193.250" }
+      - { name: "mail", type: "A", value: "192.168.193.250" }
+      - { name: "@", type: "MX", value: "mail.vodaohuyhoang.com.", priority: 10 }
+
+  - name: "hyhon.com"
+    records:
+      - { name: "dc", type: "A", value: "192.168.193.250" }
+      - { name: "ns1", type: "A", value: "192.168.193.250" }
+      - { name: "www", type: "A", value: "192.168.193.250" }
+      - { name: "mail", type: "A", value: "192.168.193.250" }
+      - { name: "@", type: "MX", value: "mail.hyhon.com.", priority: 10 }
+
+# ========== ZONE NGƯỢC ==========
+reverse_zone:
+  name: "193.168.192.in-addr.arpa"
+  records:
+    - ip: "192.168.193.250"
+      name: "www.vodaohuyhoang.com."   # Nếu muốn dùng tên khác, cần PTR bổ sung
+    # - ip: "192.168.193.250"
+    #   name: "www.hyhon.com."         # Không thể dùng hai PTR cho cùng IP
+
+# ========== CẤU HÌNH CHUNG ==========
+dns_zone_parameters:
+  zone_type: "Primary"
+  dynamic_update: "None"
+  allow_zone_transfers: true
+  zone_transfer_servers:
+    - "192.168.193.11"
+
+
+
+
+

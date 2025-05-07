@@ -1,0 +1,51 @@
+
+
+    - name: Cài đặt IIS
+      win_feature:
+        name: Web-Server
+        state: present
+
+    - name: Tạo thư mục tạm để chứa file zip
+      win_file:
+        path: "C:\\Temp"
+        state: directory
+
+    - name: Copy file .zip từ Ansible sang Windows
+      win_copy:
+        src: "{{ zip_local_path }}"
+        dest: "{{ zip_remote_path }}"
+
+    - name: Giải nén file zip trên Windows
+      win_unzip:
+        src: "{{ zip_remote_path }}"
+        dest: "{{ unzip_folder }}"
+        removes: "{{ unzip_folder }}"
+
+    - name: Tạo thư mục đích cho web
+      win_file:
+        path: "{{ dest_folder }}"
+        state: directory
+    # - name: Download ASP.NET Core Hosting Bundle
+    #   win_get_url:
+    #     url: "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.408/dotnet-sdk-8.0.408-win-x64.exe"
+    #     dest: "C:\\Temp\\dotnet-hosting.exe"
+
+    # - name: Cài ASP.NET Core Hosting Bundle
+    #   win_package:
+    #     path: "C:\\Temp\\dotnet-hosting.exe"
+    #     arguments: "/quiet"
+    #     state: present
+
+    - name: Copy nội dung sau khi unzip vào thư mục IIS
+      win_copy:
+        src: "{{ unzip_folder }}\\publish"
+        dest: "{{ dest_folder }}"
+        remote_src: yes
+
+    - name: Tạo hoặc cập nhật site trên IIS
+      win_iis_website:
+        name: "{{ app_name }}"
+        state: started
+        port: "{{ app_port }}"
+        physical_path: "{{ dest_folder }}"
+        hostname: "*"

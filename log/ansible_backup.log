@@ -1,0 +1,93 @@
+
+PLAY [Test ping các host] ******************************************************
+
+PLAY [Test check Features] *****************************************************
+
+PLAY [Test Install web] ********************************************************
+
+PLAY [Cài SQL Server trên Windows] *********************************************
+
+PLAY [Cài DNS Server trên Windows] *********************************************
+
+PLAY [Cài đặt Firewall trên Linux] *********************************************
+
+PLAY [Cai user] ****************************************************************
+
+PLAY [Cài đặt Backup] **********************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [linux_server]
+ok: [client]
+
+TASK [backup : Kiểm tra các biến hostname] *************************************
+ok: [linux_server] => {
+    "msg": "inventory_hostname: linux_server"
+}
+ok: [client] => {
+    "msg": "inventory_hostname: client"
+}
+
+TASK [backup : Tạo thư mục backup nếu chưa có trên control node] ***************
+changed: [linux_server -> localhost]
+changed: [client -> localhost]
+
+TASK [backup : Kiểm tra dung lượng đĩa] ****************************************
+changed: [client -> localhost]
+changed: [linux_server -> localhost]
+
+TASK [backup : Hiển thị dung lượng đĩa] ****************************************
+ok: [linux_server] => {
+    "msg": "Filesystem                  Size  Used Avail Use% Mounted on\n/dev/mapper/almalinux-root   26G   21G  5.5G  79% /"
+}
+ok: [client] => {
+    "msg": "Filesystem                  Size  Used Avail Use% Mounted on\n/dev/mapper/almalinux-root   26G   21G  5.5G  79% /"
+}
+
+TASK [backup : Tạo file backup trên máy target] ********************************
+changed: [linux_server]
+changed: [client]
+
+TASK [backup : Lấy file backup về control node] ********************************
+changed: [linux_server]
+changed: [client]
+
+TASK [backup : Xóa file backup tạm trên máy target] ****************************
+changed: [linux_server]
+changed: [client]
+
+TASK [backup : Kiểm tra file backup] *******************************************
+ok: [client -> localhost]
+ok: [linux_server -> localhost]
+
+TASK [backup : Kiểm tra kết quả sao lưu] ***************************************
+ok: [linux_server] => {
+    "msg": "Backup file created: /home/server_ansible/ansible/roles/backup/files/linux_server/backup_2025-05-04_01-20-04.tar.gz with size 50026796 bytes"
+}
+ok: [client] => {
+    "msg": "Backup file created: /home/server_ansible/ansible/roles/backup/files/client/backup_2025-05-04_01-20-04.tar.gz with size 68597316 bytes"
+}
+
+TASK [backup : Lưu kết quả sao lưu vào log] ************************************
+changed: [linux_server -> localhost]
+changed: [client -> localhost]
+
+TASK [backup : Thông báo hoàn thành sao lưu] ***********************************
+ok: [linux_server] => {
+    "msg": "Backup toàn bộ hệ thống đã hoàn tất trên linux_server vào 2025-05-03T18:20:04Z."
+}
+ok: [client] => {
+    "msg": "Backup toàn bộ hệ thống đã hoàn tất trên client vào 2025-05-03T18:20:04Z."
+}
+
+TASK [backup : Tim kiếm các file backup cũ hơn 7 ngày] *************************
+ok: [client -> localhost]
+ok: [linux_server -> localhost]
+
+TASK [backup : Xóa file backup cũ hơn 7 ngày] **********************************
+skipping: [linux_server]
+skipping: [client]
+
+PLAY RECAP *********************************************************************
+client                     : ok=13   changed=6    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+linux_server               : ok=13   changed=6    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+

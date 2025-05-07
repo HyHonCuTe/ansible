@@ -1,7 +1,7 @@
 - name: Tạo user mới
   user:
     name: "{{ username }}"
-    comment: "User created by Ansible"
+    comment: "Thêm user {{ username }} vào hệ thống" 
     shell: "/bin/bash"
     state: present
 
@@ -24,6 +24,21 @@
     dest: "/etc/sudoers.d/{{ username }}"
     mode: "0440"
     validate: "visudo -cf %s"
+
+# - name: Cấp quyền cho thư mục dữ liệu của user
+#   file:
+#     path: "/home/{{ username }}"
+#     owner: "{{ username }}"
+#     group: "{{ username }}"
+#     mode: "0755"
+
+# - name: Cấp quyền đọc, ghi cho tệp thư mục cho user
+#   file:
+#     path: "/path/to/directory_or_file"
+#     owner: "{{ username }}"
+#     group: "{{ username }}"
+#     mode: "0755"
+
 
 - name: Liệt kê tất cả các user
   command: getent passwd

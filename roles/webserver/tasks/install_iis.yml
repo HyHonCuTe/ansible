@@ -1,11 +1,47 @@
 ---
-- name: Cài đặt IIS Web Server
+- name: Cài đặt đầy đủ IIS với tất cả các dịch vụ và công cụ Web Tools
   win_feature:
-    name: Web-Server
+    name:
+      - Web-Server                    # IIS Web Server
+      - Web-WebServer                 # Web Server
+      - Web-Common-Http              # Common HTTP Features
+      - Web-Net-Ext45
+      - Web-Asp-Net45
+      # - Web-Default-Doc
+      # - Web-Dir-Browsing
+      # - Web-Http-Errors
+      # - Web-Static-Content
+      - Web-Http-Redirect
+      # - Web-Health                    # Health and Diagnostics
+      # - Web-Http-Logging
+      # - Web-Log-Libraries
+      # - Web-Request-Monitor
+      # - Web-Http-Tracing
+      # - Web-Performance              # Performance
+      # - Web-Stat-Compression
+      # - Web-Dyn-Compression
+      # - Web-Security                 # Security
+      # - Web-Filtering
+      # - Web-Basic-Auth
+      # - Web-Windows-Auth
+      # - Web-App-Dev                  # Application Development
+      # - Web-Net-Ext
+      # - Web-Net-Ext45
+      # - Web-Asp
+      # - Web-Asp-Net
+      # - Web-Asp-Net45
+      # - Web-CGI
+      # - Web-ISAPI-Ext
+      # - Web-ISAPI-Filter
+      - Web-Mgmt-Tools               # Management Tools
+      # - Web-Mgmt-Console
+      - Web-Mgmt-Service
+      - Web-Scripting-Tools
+      # - Web-WMI
     state: present
   register: iis_result
 
-- name: Khởi động lại nếu cần (do cài IIS)
+- name: Khởi động lại nếu cần thiết
   win_reboot:
   when: iis_result.reboot_required
 

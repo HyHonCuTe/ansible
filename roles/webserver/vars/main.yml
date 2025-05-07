@@ -1,0 +1,7 @@
+
+    app_name: NameWeb
+    app_port: 8080
+    dest_folder: "C:\\inetpub\\wwwroot\\NameWeb"
+    zip_local_path: "/home/server_ansible/ansible/roles/webserver/files/NameListWeb.zip"
+    zip_remote_path: "C:\\Temp\\NameListWeb.zip"
+    unzip_folder: "C:\\Temp\\NameWebUnzipped"

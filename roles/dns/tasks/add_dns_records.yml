@@ -1,120 +1,146 @@
 
 
-#  # Thêm bản ghi A và các bản ghi khác (trừ MX)
-#     - name: Thêm A records vào zone thuận
-#       ansible.windows.win_dns_record:
-#         zone: "{{ dns_zone_name }}"
-#         name: "{{ item.name }}"
-#         type: "{{ item.type }}"
-#         value: "{{ item.value }}"
-#         state: present
-#       loop: "{{ dns_records }}"
-#       loop_control:
-#         label: "{{ item.name }} ({{ item.type }})"
-#       when: 
-#         - item.type != "MX"
+ # Thêm bản ghi A và các bản ghi khác (trừ MX)
+    - name: Thêm A records vào zone thuận
+      ansible.windows.win_dns_record:
+        zone: "{{ dns_zone_name }}"
+        name: "{{ item.name }}"
+        type: "{{ item.type }}"
+        value: "{{ item.value }}"
+        state: present
+      loop: "{{ dns_records }}"
+      loop_control:
+        label: "{{ item.name }} ({{ item.type }})"
+      when: 
+        - item.type != "MX"
 
-#     # Thêm MX Record bằng PowerShell (do module win_dns_record không hỗ trợ)
-#     # - name: Thêm MX records
-#     #   ansible.windows.win_shell: |
-#     #     Add-DnsServerResourceRecord -MX `
-#     #       -ZoneName "{{ dns_zone_name }}" `
-#     #       -Name "@" `
-#     #       -MailExchange "mail.vodaohuyhoang.com." `
-#     #       -Preference 10
-#     #   when: 
-#     #     - "'@' in dns_records | map(attribute='name') | list"
+    # Thêm MX Record bằng PowerShell (do module win_dns_record không hỗ trợ)
+    # - name: Thêm MX records
+    #   ansible.windows.win_shell: |
+    #     Add-DnsServerResourceRecord -MX `
+    #       -ZoneName "{{ dns_zone_name }}" `
+    #       -Name "@" `
+    #       -MailExchange "mail.vodaohuyhoang.com." `
+    #       -Preference 10
+    #   when: 
+    #     - "'@' in dns_records | map(attribute='name') | list"
 
-#     # Thêm bản ghi PTR cho Reverse Zone (chỉ 1 task)
-#     - name: Thêm bản ghi Reverse (PTR)
-#       ansible.windows.win_dns_record:
-#         zone: "{{ dns_reverse_zone }}"
-#         name: "{{ item.ip.split('.')[-1] }}"  # Ví dụ: 250 từ IP 192.168.193.250
-#         type: "PTR"
-#         value: "{{ item.name }}"
-#       loop: "{{ reverse_records }}"
+    # Thêm bản ghi PTR cho Reverse Zone (chỉ 1 task)
+    - name: Thêm bản ghi Reverse (PTR)
+      ansible.windows.win_dns_record:
+        zone: "{{ dns_reverse_zone }}"
+        name: "{{ item.ip.split('.')[-1] }}"  # Ví dụ: 250 từ IP 192.168.193.250
+        type: "PTR"
+        value: "{{ item.name }}"
+      loop: "{{ reverse_records }}"
 
-#     # Thêm NS Record cho cả Forward và Reverse Zone
-#     - name: Thêm NS Record cho Forward Zone
-#       ansible.windows.win_dns_record:
-#         zone: "{{ dns_zone_name }}"
-#         name: "@"
-#         type: "NS"
-#         value: "ns1.vodaohuyhoang.com."
+    # Thêm NS Record cho cả Forward và Reverse Zone
+    - name: Thêm NS Record cho Forward Zone
+      ansible.windows.win_dns_record:
+        zone: "{{ dns_zone_name }}"
+        name: "@"
+        type: "NS"
+        value: "ns1.vodaohuyhoang.com."
 
-#     - name: Thêm NS Record cho Reverse Zone
-#       ansible.windows.win_dns_record:
-#         zone: "{{ dns_reverse_zone }}"
-#         name: "@"
-#         type: "NS"
-#         value: "ns1.vodaohuyhoang.com."
+    - name: Thêm NS Record cho Reverse Zone
+      ansible.windows.win_dns_record:
+        zone: "{{ dns_reverse_zone }}"
+        name: "@"
+        type: "NS"
+        value: "ns1.vodaohuyhoang.com."
 
-#     # Thêm A Record cho DNS Server (bắt buộc)
-#     - name: Thêm A Record cho DNS Server
-#       ansible.windows.win_dns_record:
-#         zone: "{{ dns_zone_name }}"
-#         name: "ns1"
-#         type: "A"
-#         value: "192.168.193.250"
-
-
-- name: Thêm A record cho Domain Controller
-  community.windows.win_dns_record:
-    zone: "{{ dns_zone_name }}"
-    name: "dc"
-    type: "A"
-    value: "192.168.193.250"
-    state: present
-
-- name: Thêm bản ghi PTR cho Reverse Zone
-  community.windows.win_dns_record:
-    zone: "{{ dns_reverse_zone }}"
-    name: "{{ item.ip.split('.')[-1] }}"
-    type: "PTR"
-    value: "{{ item.name }}"
-  loop:
-    - { ip: "192.168.193.250", name: "dc.vodaohuyhoang.com" }
-
-- name: Thêm SRV record cho LDAP
-  community.windows.win_dns_record:
-    zone: "{{ dns_zone_name }}"
-    name: "_ldap._tcp.dc._msdcs"
-    type: "SRV"
-    priority: 0
-    weight: 100
-    port: 389
-    value: "dc.vodaohuyhoang.com"
-    state: present
+    # Thêm A Record cho DNS Server (bắt buộc)
+    - name: Thêm A Record cho DNS Server
+      ansible.windows.win_dns_record:
+        zone: "{{ dns_zone_name }}"
+        name: "ns1"
+        type: "A"
+        value: "192.168.193.250"
 
 
-   # Thêm MX Record bằng PowerShell (do module win_dns_record không hỗ trợ)
-- name: Thêm MX records
-  ansible.windows.win_shell: |
-    Add-DnsServerResourceRecord -MX `
-      -ZoneName "{{ dns_zone_name }}" `
-      -Name "@" `
-      -MailExchange "mail.vodaohuyhoang.com." `
-      -Preference 10
-  when: 
-    - "'@' in dns_records | map(attribute='name') | list"
 
-- name: Thêm NS record cho Forward Zone
-  community.windows.win_dns_record:
-    zone: "{{ dns_zone_name }}"
-    name: "@"
-    type: "NS"
-    value: "ns1.vodaohuyhoang.com."
 
-- name: Thêm NS record cho Reverse Zone
-  community.windows.win_dns_record:
-    zone: "{{ dns_reverse_zone }}"
-    name: "@"
-    type: "NS"
-    value: "ns1.vodaohuyhoang.com."
 
-- name: Thêm A record cho DNS Server
-  community.windows.win_dns_record:
-    zone: "{{ dns_zone_name }}"
-    name: "ns1"
-    type: "A"
-    value: "192.168.193.250"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# - name: Thêm A record cho Domain Controller
+#   community.windows.win_dns_record:
+#     zone: "{{ dns_zone_name }}"
+#     name: "dc"
+#     type: "A"
+#     value: "192.168.193.250"
+#     state: present
+
+# - name: Thêm bản ghi PTR cho Reverse Zone
+#   community.windows.win_dns_record:
+#     zone: "{{ dns_reverse_zone }}"
+#     name: "{{ item.ip.split('.')[-1] }}"
+#     type: "PTR"
+#     value: "{{ item.name }}"
+#   loop:
+#     - { ip: "192.168.193.250", name: "dc.vodaohuyhoang.com" }
+
+# - name: Thêm SRV record cho LDAP
+#   community.windows.win_dns_record:
+#     zone: "{{ dns_zone_name }}"
+#     name: "_ldap._tcp.dc._msdcs"
+#     type: "SRV"
+#     priority: 0
+#     weight: 100
+#     port: 389
+#     value: "dc.vodaohuyhoang.com"
+#     state: present
+
+
+#    # Thêm MX Record bằng PowerShell (do module win_dns_record không hỗ trợ)
+# - name: Thêm MX records
+#   ansible.windows.win_shell: |
+#     Add-DnsServerResourceRecord -MX `
+#       -ZoneName "{{ dns_zone_name }}" `
+#       -Name "@" `
+#       -MailExchange "mail.vodaohuyhoang.com." `
+#       -Preference 10
+#   when: 
+#     - "'@' in dns_records | map(attribute='name') | list"
+
+# - name: Thêm NS record cho Forward Zone
+#   community.windows.win_dns_record:
+#     zone: "{{ dns_zone_name }}"
+#     name: "@"
+#     type: "NS"
+#     value: "ns1.vodaohuyhoang.com."
+    
+    
+# #     - name: Thêm NS Record cho Reverse Zone
+# #       ansible.windows.win_dns_record:
+# #         zone: "{{ dns_reverse_zone }}"
+# #         name: "@"
+# #         type: "NS"
+# #         value: "ns1.vodaohuyhoang.com."
+
+# - name: Thêm NS record cho Reverse Zone
+#   community.windows.win_dns_record:
+#     zone: "{{ dns_reverse_zone }}"
+#     name: "@"
+#     type: "NS"
+#     value: "ns1.vodaohuyhoang.com."
+
+# - name: Thêm A record cho DNS Server
+#   community.windows.win_dns_record:
+#     zone: "{{ dns_zone_name }}"
+#     name: "ns1"
+#     type: "A"
+#     value: "192.168.193.250"
