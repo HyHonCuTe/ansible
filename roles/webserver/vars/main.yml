@@ -1,7 +1,10 @@
 
-    app_name: NameWeb
-    app_port: 8080
-    dest_folder: "C:\\inetpub\\wwwroot\\NameWeb"
-    zip_local_path: "/home/server_ansible/ansible/roles/webserver/files/NameListWeb.zip"
-    zip_remote_path: "C:\\Temp\\NameListWeb.zip"
-    unzip_folder: "C:\\Temp\\NameWebUnzipped"
+
+    app_name: MyWebApp
+    app_port: 80
+    zip_local_path: /home/server_ansible/ansible/roles/webserver/files/myapp.zip
+    zip_remote_path: C:\Temp\myapp.zip
+    unzip_folder: C:\Temp\myapp
+    dest_folder: C:\inetpub\mywebapp
+    hosting_bundle_url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.15/dotnet-hosting-8.0.15-win.exe"
+    hosting_bundle_path: "C:\\Temp\\dotnet-hosting.exe"

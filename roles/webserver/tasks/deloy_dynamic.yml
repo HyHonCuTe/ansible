@@ -1,44 +1,93 @@
 
 
-    - name: Cài đặt IIS
-      win_feature:
-        name: Web-Server
-        state: present
+    # - name: Cài đặt IIS
+    #   win_feature:
+    #     name: Web-Server
+    #     state: present
 
-    - name: Tạo thư mục tạm để chứa file zip
+    # - name: Tạo thư mục tạm để chứa file zip
+    #   win_file:
+    #     path: "C:\\Temp"
+    #     state: directory
+
+    # - name: Copy file .zip từ Ansible sang Windows
+    #   win_copy:
+    #     src: "{{ zip_local_path }}"
+    #     dest: "{{ zip_remote_path }}"
+
+    # - name: Giải nén file zip trên Windows
+    #   win_unzip:
+    #     src: "{{ zip_remote_path }}"
+    #     dest: "{{ unzip_folder }}"
+    #     removes: "{{ unzip_folder }}"
+
+    # # - name: Tạo thư mục đích cho web
+    # #   win_file:
+    # #     path: "{{ dest_folder }}"
+    # #     state: directory
+    # # - name: Download ASP.NET Core Hosting Bundle
+    # #   win_get_url:
+    # #     url: "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.408/dotnet-sdk-8.0.408-win-x64.exe"
+    # #     dest: "C:\\Temp\\dotnet-hosting.exe"
+
+    # # - name: Cài ASP.NET Core Hosting Bundle
+    # #   win_package:
+    # #     path: "C:\\Temp\\dotnet-hosting.exe"
+    # #     arguments: "/quiet"
+    # #     state: present
+
+    # - name: Copy nội dung sau khi unzip vào thư mục IIS
+    #   win_copy:
+    #     src: "{{ unzip_folder }}\\publish"
+    #     dest: "{{ dest_folder }}"
+    #     remote_src: yes
+
+    # - name: Tạo hoặc cập nhật site trên IIS
+    #   win_iis_website:
+    #     name: "{{ app_name }}"
+    #     state: started
+    #     port: "{{ app_port }}"
+    #     physical_path: "{{ dest_folder }}"
+    #     hostname: "*"
+
+
+    # - name: Cài đặt IIS
+    #   win_feature:
+    #     name: Web-Server
+    #     state: present
+
+  
+
+
+    - name: Tạo thư mục tạm
       win_file:
         path: "C:\\Temp"
         state: directory
 
-    - name: Copy file .zip từ Ansible sang Windows
+    - name: Copy file zip lên Windows
       win_copy:
         src: "{{ zip_local_path }}"
         dest: "{{ zip_remote_path }}"
 
-    - name: Giải nén file zip trên Windows
+    - name: Giải nén file zip
       win_unzip:
         src: "{{ zip_remote_path }}"
         dest: "{{ unzip_folder }}"
         removes: "{{ unzip_folder }}"
 
-    - name: Tạo thư mục đích cho web
-      win_file:
-        path: "{{ dest_folder }}"
-        state: directory
-    # - name: Download ASP.NET Core Hosting Bundle
-    #   win_get_url:
-    #     url: "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.408/dotnet-sdk-8.0.408-win-x64.exe"
-    #     dest: "C:\\Temp\\dotnet-hosting.exe"
+    - name: Cài đặt ASP.NET Core Hosting Bundle
+      win_get_url:
+        url: "{{ hosting_bundle_url }}"
+        dest: "{{ hosting_bundle_path }}"
 
-    # - name: Cài ASP.NET Core Hosting Bundle
-    #   win_package:
-    #     path: "C:\\Temp\\dotnet-hosting.exe"
-    #     arguments: "/quiet"
-    #     state: present
-
-    - name: Copy nội dung sau khi unzip vào thư mục IIS
+    - name: Chạy cài đặt Hosting Bundle
+      win_package:
+        path: "{{ hosting_bundle_path }}"
+        arguments: "/quiet"
+        state: present
+    - name: Copy nội dung đã unzip vào thư mục IIS
       win_copy:
-        src: "{{ unzip_folder }}\\publish"
+        src: "{{ unzip_folder }}\\mywebapp\\publish"
         dest: "{{ dest_folder }}"
         remote_src: yes
 
@@ -47,5 +96,44 @@
         name: "{{ app_name }}"
         state: started
         port: "{{ app_port }}"
-        physical_path: "{{ dest_folder }}"
+        physical_path: "{{ dest_folder }}\\publish"
         hostname: "*"
+
+    # - name: Mở port 8080 trên firewall
+    #   win_firewall_rule:
+    #     name: "Allow HTTP Port 8080"
+    #     localport: 8080
+    #     protocol: TCP
+    #     action: allow
+    #     direction: in
+    #     profile: any
+    #     state: present
+
+    - name: Đảm bảo dịch vụ IIS đang chạy
+      win_service:
+        name: W3SVC
+        start_mode: auto
+        state: started
+
+      
+
+
+    - name: Chờ web khởi động
+      win_shell: |
+        Start-Sleep -Seconds 15
+
+
+    - name: Tạo user SQL Server cho IIS APPPOOL\DefaultAppPool
+      win_shell: |
+        sqlcmd -S localhost -E -Q "CREATE LOGIN [IIS APPPOOL\\DefaultAppPool] FROM WINDOWS"
+        sqlcmd -S localhost -E -d NameDb -Q "CREATE USER [IIS APPPOOL\\DefaultAppPool] FOR LOGIN [IIS APPPOOL\\DefaultAppPool]"
+        sqlcmd -S localhost -E -d NameDb -Q "EXEC sp_addrolemember N'db_owner', N'IIS APPPOOL\\DefaultAppPool'"
+      args:
+        executable: cmd  
+
+        
+    - name: Kiểm tra web đã hoạt động (HTTP GET tới localhost:8080)
+      win_uri:
+        url: "http://localhost:{{ app_port }}"
+        method: GET
+        status_code: 200

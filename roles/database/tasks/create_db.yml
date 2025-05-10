@@ -27,3 +27,12 @@
 # $result = Invoke-Sqlcmd -ServerInstance $serverName -Query $query
 # $result
 
+# # Optional: Kiểm tra kết quả thực thi
+# $serverName = "localhost"
+# $databaseName = "NameDb"
+# $query = "SELECT * FROM Person"
+
+# $result = Invoke-Sqlcmd -ServerInstance $serverName -Database $databaseName -Query $query
+# $result
+
+

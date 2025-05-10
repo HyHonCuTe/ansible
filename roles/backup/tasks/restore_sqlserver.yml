@@ -1,0 +1,21 @@
+
+    - name: Ensure restore folder exists on Windows
+      win_file:
+        path: "{{ remote_backup_dir }}"
+        state: directory
+
+    - name: Upload all .bak files to Windows
+      win_copy:
+        src: "{{ item }}"
+        dest: "{{ remote_backup_dir }}\\"
+      loop: "{{ lookup('fileglob', local_backup_dir + '/*.bak', wantlist=True) }}"
+
+    - name: Restore all uploaded databases
+      win_shell: |
+        $files = Get-ChildItem -Path "{{ remote_backup_dir }}" -Filter *.bak
+        foreach ($file in $files) {
+            $name = $file.BaseName.Split('_')[0]  # Giả sử tên dạng <dbname>_timestamp.bak
+            Restore-SqlDatabase -ServerInstance "localhost" -Database $name -BackupFile $file.FullName -ReplaceDatabase
+        }
+      args:
+        executable: powershell

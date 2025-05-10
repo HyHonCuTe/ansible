@@ -1,1 +1,6 @@
 backup_folder: "/home/server_ansible/ansible/roles/backup/files"
+
+
+backup_dir: "C:\\backup"
+local_backup_dir: "/home/server_ansible/ansible/roles/backup/files/database"
+remote_backup_dir: "C:\\restore"

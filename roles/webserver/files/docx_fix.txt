@@ -1,0 +1,12 @@
+
+
+# tao user sql server de login DB
+sqlcmd -S localhost -E -Q "CREATE LOGIN [IIS APPPOOL\DefaultAppPool] FROM WINDOWS"
+sqlcmd -S localhost -E -d NameDb -Q "CREATE USER [IIS APPPOOL\DefaultAppPool] FOR LOGIN [IIS APPPOOL\DefaultAppPool]"
+sqlcmd -S localhost -E -d NameDb -Q "EXEC sp_addrolemember N'db_owner', N'IIS APPPOOL\DefaultAppPool'"
+
+
+# cai 2 dotnet de deloy
+https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.408/dotnet-sdk-8.0.408-win-x64.exe
+https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.15/dotnet-hosting-8.0.15-win.exe
+

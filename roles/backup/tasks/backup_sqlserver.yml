@@ -1,0 +1,35 @@
+
+    - name: Ensure backup folder exists on target
+      win_file:
+        path: "{{ backup_dir }}"
+        state: directory
+
+    - name: Backup all user databases
+      win_shell: |
+        $excluded = @('master', 'tempdb', 'model', 'msdb')
+        $server = "localhost"
+        $backupPath = "{{ backup_dir }}"
+
+        $databases = Invoke-Sqlcmd -ServerInstance $server -Query "SELECT name FROM sys.databases WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')"
+
+        foreach ($db in $databases) {
+            $name = $db.name
+            $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+            $filename = "$backupPath\$name" + "_$timestamp.bak"
+            Backup-SqlDatabase -Database $name -ServerInstance $server -BackupFile $filename
+        }
+      args:
+        executable: powershell
+
+    - name: Find all .bak files in backup directory
+      win_find:
+        paths: "{{ backup_dir }}"
+        patterns: "*.bak"
+      register: found_bak_files
+
+    - name: Fetch all .bak files to Ansible controller
+      fetch:
+        src: "{{ item.path }}"
+        dest: "{{ local_backup_dir }}/"
+        flat: yes
+      loop: "{{ found_bak_files.files }}"
