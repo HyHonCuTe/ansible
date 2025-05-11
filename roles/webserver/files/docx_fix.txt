@@ -1,5 +1,6 @@
 
 
+
 # tao user sql server de login DB
 sqlcmd -S localhost -E -Q "CREATE LOGIN [IIS APPPOOL\DefaultAppPool] FROM WINDOWS"
 sqlcmd -S localhost -E -d NameDb -Q "CREATE USER [IIS APPPOOL\DefaultAppPool] FOR LOGIN [IIS APPPOOL\DefaultAppPool]"

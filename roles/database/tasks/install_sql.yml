@@ -3,9 +3,7 @@
     name: 'MSSQLSERVER'
   register: service_info
 
-- name: Kết thúc play nếu dịch vụ MSSQLSERVER đã tồn tại
-  ansible.builtin.meta: end_play
-  when: service_info.exists
+
 
 - name: Tạo thư mục tạm thời trên máy mục tiêu
   ansible.windows.win_file:
@@ -71,3 +69,22 @@
 #     state: absent
 #   when:
 #     - not service_info.exists
+
+- name: Lấy trạng thái dịch vụ SQL Server (MSSQLSERVER)
+  ansible.windows.win_service:
+    name: MSSQLSERVER
+  register: sql_service_status
+
+- name: In toàn bộ thông tin dịch vụ (debug để kiểm tra)
+  debug:
+    var: sql_service_status
+
+- name: Hiển thị trạng thái dịch vụ SQL Server
+  debug:
+    msg: >
+      Trạng thái: {{ sql_service_status.state | default('Không rõ') }},
+      Tự khởi động: {{ sql_service_status.start_mode | default('Không rõ') }}
+
+- name: Kết thúc play nếu dịch vụ MSSQLSERVER đã tồn tại
+  ansible.builtin.meta: end_play
+  when: service_info.exists

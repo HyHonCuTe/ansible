@@ -1,4 +1,3 @@
----
 - name: Ping Linux
   ansible.builtin.ping:
   when: ansible_os_family != "Windows"

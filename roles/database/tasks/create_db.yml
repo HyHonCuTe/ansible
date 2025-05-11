@@ -21,6 +21,17 @@
   environment:
     PATH: "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\;{{ ansible_env.PATH }}"
 
+- name: Lấy trạng thái dịch vụ SQL Server (MSSQLSERVER)
+  win_service:
+    name: MSSQLSERVER
+  register: sql_service_status
+
+- name: Hiển thị trạng thái dịch vụ SQL Server
+  debug:
+    msg: >
+      Trạng thái dịch vụ SQL Server: {{ sql_service_status.status.state }},
+      chế độ khởi động: {{ sql_service_status.status.start_mode }}
+
 # # Optional: Kiểm tra kết quả thực thi
 # $serverName = "localhost"  # Tên máy chủ hoặc IP của SQL Server
 # $query = "SELECT name FROM sys.databases"
