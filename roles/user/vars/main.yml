@@ -1,3 +1,3 @@
 ---
-username: "user01"  # Tên user bạn muốn tạo
+username: "usernaylademo"  # Tên user bạn muốn tạo
 ssh_key_path: "/home/server_ansible/.ssh/id_rsa.pub"  # Đường dẫn đến SSH public key của bạn

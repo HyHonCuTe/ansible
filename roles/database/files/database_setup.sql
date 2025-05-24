@@ -7,4 +7,5 @@ GO
 CREATE TABLE Person (
     Id INT IDENTITY PRIMARY KEY,
     Name NVARCHAR(100)
+
 );
