@@ -1,0 +1,12 @@
+- name: Cài đặt Web Server và triển khai Website
+  hosts: win_server
+  gather_facts: true
+  vars:
+    webserver_tasks:
+      - install_iis
+      - deploy_site
+      - check_site
+  roles:
+    - role: webserver
+      become: false
+  tags: install_web

@@ -1,37 +1,4 @@
 ---
-- name: Cài đặt Web Server và triển khai Website
-  hosts: win_server
-  gather_facts: true
-  vars:
-    webserver_tasks:
-      - install_iis
-      - deploy_site
-      - check_site
-  roles:
-    - role: webserver
-      become: false
-  tags: install_web
-
-- name: Cài đặt SQL Server trên Windows
-  hosts: win_server
-  gather_facts: no
-  collections:
-    - ansible.windows
-  roles:
-    - database
-  tags:
-    - install_database
-
-- name: Cài đặt DNS Server trên Windows
-  hosts: win_server
-  gather_facts: yes
-  collections:
-    - ansible.windows
-  roles:
-    - dns
-  tags:
-    - install_dns
-
 # - name: Cài đặt DHCP Server trên Windows
 #   hosts: win_server
 #   gather_facts: yes
@@ -42,42 +9,12 @@
 #   tags:
 #     - install_dhcp
 
-- name: Cài đặt tường lửa (Firewall) trên Linux
-  hosts: linux_server
-  gather_facts: true
-  roles:
-    - role: firewall
-      become: true
-  tags:
-    - install_firewall
 
-- name: Tạo người dùng trên Linux
-  hosts: linux_server
-  gather_facts: true
-  roles:
-    - role: user
-      become: true
-  tags:
-    - install_user
 
-- name: Cài đặt hệ thống Backup trên Linux
-  hosts: linux_servers
-  gather_facts: true
-  roles:
-    - role: backup
-      become: true
-  tags:
-    - install_backup
+
+
 
 
   
 
 
-- name: Cài đặt hệ thống Backup trên Windows
-  hosts: win_server
-  gather_facts: true
-  roles:
-    - role: backup
-      become: false
-  tags:
-    - install_backupdb

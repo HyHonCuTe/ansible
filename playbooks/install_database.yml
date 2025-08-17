@@ -1,0 +1,9 @@
+- name: Cài đặt SQL Server trên Windows
+  hosts: win_server
+  gather_facts: no
+  collections:
+    - ansible.windows
+  roles:
+    - database
+  tags:
+    - install_database

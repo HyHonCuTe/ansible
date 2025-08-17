@@ -1,0 +1,9 @@
+
+- name: Cài đặt hệ thống Backup trên Linux
+  hosts: linux_servers
+  gather_facts: true
+  roles:
+    - role: backup
+      become: true
+  tags:
+    - install_backup
