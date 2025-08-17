@@ -1,0 +1,10 @@
+- name: Kiểm tra tính năng trên Windows Server
+  hosts: win_server
+  gather_facts: true
+  vars:
+    webserver_tasks:
+      - get_features
+  roles:
+    - role: webserver
+      become: false
+  tags: check_features

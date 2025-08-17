@@ -1,0 +1,7 @@
+- name: Kiểm tra kết nối các host bằng ping
+  hosts: all
+  gather_facts: true
+  roles:
+    - role: common
+      become: "{{ ansible_os_family != 'Windows' }}"
+  tags: ping

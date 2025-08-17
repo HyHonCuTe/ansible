@@ -1,23 +1,4 @@
 ---
-- name: Kiểm tra kết nối các host bằng ping
-  hosts: all
-  gather_facts: true
-  roles:
-    - role: common
-      become: "{{ ansible_os_family != 'Windows' }}"
-  tags: ping
-
-- name: Kiểm tra tính năng trên Windows Server
-  hosts: win_server
-  gather_facts: true
-  vars:
-    webserver_tasks:
-      - get_features
-  roles:
-    - role: webserver
-      become: false
-  tags: check_features
-
 - name: Cài đặt Web Server và triển khai Website
   hosts: win_server
   gather_facts: true
@@ -89,14 +70,7 @@
     - install_backup
 
 
-- name: Cài đặt Suricata trên Linux
-  hosts: client
-  gather_facts: true
-  roles:
-    - role: suricata
-      become: true
-  tags:
-    - install_suricata    
+  
 
 
 - name: Cài đặt hệ thống Backup trên Windows
