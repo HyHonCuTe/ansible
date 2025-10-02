@@ -1,5 +1,5 @@
 - name: Cài đặt Web Server và triển khai Website
-  hosts: win_server
+  hosts: all
   gather_facts: true
   vars:
     webserver_tasks:

@@ -1,6 +1,6 @@
 
 - name: Cài đặt hệ thống Backup trên Linux
-  hosts: linux_servers
+  hosts: all
   gather_facts: true
   roles:
     - role: backup

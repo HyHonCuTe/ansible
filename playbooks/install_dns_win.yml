@@ -1,5 +1,5 @@
 - name: Cài đặt DNS Server trên Windows
-  hosts: win_server
+  hosts: all
   gather_facts: yes
   collections:
     - ansible.windows

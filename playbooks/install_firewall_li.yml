@@ -1,5 +1,5 @@
 - name: Cài đặt tường lửa (Firewall) trên Linux
-  hosts: linux_server
+  hosts: all
   gather_facts: true
   roles:
     - role: firewall

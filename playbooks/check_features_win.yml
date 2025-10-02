@@ -1,5 +1,5 @@
 - name: Kiểm tra tính năng trên Windows Server
-  hosts: win_server
+  hosts: all
   gather_facts: true
   vars:
     webserver_tasks:

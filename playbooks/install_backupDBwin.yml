@@ -1,6 +1,6 @@
 
 - name: Cài đặt hệ thống Backup trên Windows
-  hosts: win_server
+  hosts: all
   gather_facts: true
   roles:
     - role: backup

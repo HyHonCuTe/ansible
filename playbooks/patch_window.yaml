@@ -1,0 +1,6 @@
+- name: Cập nhật bản vá cho máy chủ Windows
+  hosts: all
+  gather_facts: yes
+  roles:
+    - role: patching
+  tags: patch_windows
