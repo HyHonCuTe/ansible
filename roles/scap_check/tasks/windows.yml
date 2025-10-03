@@ -1,0 +1,23 @@
+---
+# Kiểm tra bảo mật Windows bằng OpenSCAP
+
+- name: "Tạo thư mục lưu kết quả kiểm tra trên máy đích (Windows)"
+  ansible.windows.win_file:
+    path: C:\scap
+    state: directory
+
+- name: "Chạy kiểm tra CIS Benchmark với OpenSCAP (Windows)"
+  ansible.windows.win_command: >
+    "C:\Program Files\OpenSCAP\bin\oscap.exe"
+    xccdf eval
+    --profile {{ cis_profile }}
+    --results C:\scap\windows_results.xml
+    --report C:\scap\windows_report.html
+    C:\Program Files\OpenSCAP\share\xml\scap\ssg\content\ssg-windows.xml
+  register: ket_qua_windows
+
+- name: "Copy kết quả từ host Windows về Ansible Controller"
+  ansible.builtin.fetch:
+    src: C:\scap\windows_report.html
+    dest: roles/scap_check/results/windows_{{ inventory_hostname }}.html
+    flat: yes

@@ -1,0 +1,59 @@
+- name: "Cài đặt gói OpenSCAP (Linux)"
+  ansible.builtin.package:
+    name: "{{ ten_goi }}"
+    state: present
+  loop:
+    - openscap-scanner
+    - scap-security-guide
+  loop_control:
+    loop_var: ten_goi
+  when: ansible_os_family != "Windows"
+
+- name: "Tạo thư mục lưu kết quả kiểm tra trên máy đích (Linux)"
+  ansible.builtin.file:
+    path: /var/tmp/scap
+    state: directory
+    mode: '0755'
+  when: ansible_os_family != "Windows"
+
+- name: "Tìm file datastream SCAP của AlmaLinux"
+  ansible.builtin.find:
+    paths: /usr/share/xml/scap/ssg/content/
+    patterns: "ssg-almalinux*-ds.xml"
+  register: scap_files
+  when: ansible_os_family != "Windows"
+
+- name: "Dừng playbook nếu không tìm thấy file SCAP"
+  ansible.builtin.fail:
+    msg: "Không tìm thấy file SCAP của AlmaLinux trong /usr/share/xml/scap/ssg/content/"
+  when:
+    - ansible_os_family != "Windows"
+    - scap_files.matched | int == 0
+
+- name: "Chạy kiểm tra CIS Benchmark với OpenSCAP (Linux)"
+  ansible.builtin.command: >
+    oscap xccdf eval
+    --fetch-remote-resources
+    --profile {{ cis_profile | default('xccdf_org.ssgproject.content_profile_cis') }}
+    --results /var/tmp/scap/linux_results.xml
+    --report /var/tmp/scap/linux_report.html
+    {{ scap_files.files[0].path }}
+  register: ket_qua_linux
+  changed_when: false
+  failed_when: ket_qua_linux.rc == 1
+  when: ansible_os_family != "Windows"
+
+- name: "Create results directory on Ansible Controller"
+  ansible.builtin.file:
+    path: roles/scap_check/results
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: "Copy kết quả từ host Linux về Ansible Controller"
+  ansible.builtin.fetch:
+    src: /var/tmp/scap/linux_report.html
+    dest: roles/scap_check/results/linux_{{ inventory_hostname }}.html
+    flat: yes
+  when: ansible_os_family != "Windows"
