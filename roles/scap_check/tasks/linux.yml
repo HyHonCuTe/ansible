@@ -1,3 +1,6 @@
+---
+# File: roles/scap_check/tasks/linux.yml
+
 - name: "Cài đặt gói OpenSCAP"
   ansible.builtin.package:
     name:
@@ -26,55 +29,316 @@
     - ansible_os_family != "Windows"
     - scap_files.matched | int == 0
 
-- name: "Chạy kiểm tra CIS Benchmark với OpenSCAP (Linux)"
+- name: "Hiển thị profile đang sử dụng"
+  ansible.builtin.debug:
+    msg: |
+      🔍 Scanning với profile: {{ cis_profile }}
+      📄 SCAP file: {{ scap_files.files[0].path }}
+      🖥️  Host: {{ inventory_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})
+  when: ansible_os_family != "Windows"
+
+# ==================== SCAN TRƯỚC KHI FIX ====================
+- name: "Chạy kiểm tra CIS Benchmark với OpenSCAP (TRƯỚC FIX)"
   ansible.builtin.command: >
     oscap xccdf eval
     --fetch-remote-resources
-    --profile {{ cis_profile}}
-    --results /var/tmp/scap/linux_results.xml
-    --report /var/tmp/scap/linux_report.html
+    --profile {{ cis_profile }}
+    --results /var/tmp/scap/scan_before.xml
+    --report /var/tmp/scap/scan_before.html
     {{ scap_files.files[0].path }}
-  register: ket_qua_linux
+  register: ket_qua_before
   changed_when: false
-  failed_when: ket_qua_linux.rc == 1
+  failed_when: ket_qua_before.rc not in [0, 2]
   when: ansible_os_family != "Windows"
 
-- name: "Tạo thư mục lưu kết quả trên Ansible Controller"
+- name: "Đếm số lỗi FAIL (trước fix)"
+  ansible.builtin.shell: |
+    sed -n 's/.*<result>\([^<]*\)<\/result>.*/\1/p' /var/tmp/scap/scan_before.xml | grep -c "^fail$" || echo "0"
+  register: failed_before
+  changed_when: false
+  when: ansible_os_family != "Windows"
+
+- name: "Đếm số PASS (trước fix)"
+  ansible.builtin.shell: |
+    sed -n 's/.*<result>\([^<]*\)<\/result>.*/\1/p' /var/tmp/scap/scan_before.xml | grep -c "^pass$" || echo "0"
+  register: passed_before
+  changed_when: false
+  when: ansible_os_family != "Windows"
+
+- name: "Hiển thị kết quả scan TRƯỚC FIX"
+  ansible.builtin.debug:
+    msg: |
+      📊 ===== KẾT QUẢ SCAN TRƯỚC FIX =====
+      🖥️  Host: {{ inventory_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})
+      ✅ PASS:   {{ passed_before.stdout }}
+      ❌ FAIL:   {{ failed_before.stdout }}
+      📈 Total:  {{ (passed_before.stdout | int) + (failed_before.stdout | int) }}
+      
+      {% if failed_before.stdout | int > 0 %}
+      ⚠️  Phát hiện {{ failed_before.stdout }} lỗi cần khắc phục!
+      {% else %}
+      ✅ Hệ thống đạt chuẩn bảo mật
+      {% endif %}
+  when: ansible_os_family != "Windows"
+
+# ==================== TẠO THỦ MỤC TRÊN CONTROLLER ====================
+- name: "Tạo thư mục results trên Ansible Controller"
   delegate_to: localhost
-  run_once: true
+  run_once: false
   ansible.builtin.file:
     path: "{{ playbook_dir }}/../roles/scap_check/results"
     state: directory
     mode: '0775'
 
-- name: "Copy kết quả từ host Linux về Ansible Controller"
-  ansible.builtin.fetch:
-    src: /var/tmp/scap/linux_report.html
-    dest: "{{ playbook_dir }}/../roles/scap_check/results/linux_{{ inventory_hostname }}_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
-    flat: yes
+- name: "Tạo thư mục backup trên Ansible Controller"
+  delegate_to: localhost
+  run_once: false
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../roles/scap_check/backup"
+    state: directory
+    mode: '0775'
 
-- name: "Sinh remediation playbook từ kết quả scan (Linux)"
-  command: >
-    oscap xccdf generate fix
+# ==================== COPY REPORT TRƯỚC FIX ====================
+- name: "Copy báo cáo TRƯỚC FIX về Ansible Controller"
+  ansible.builtin.fetch:
+    src: /var/tmp/scap/scan_before.html
+    dest: "{{ playbook_dir }}/../roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
+    flat: yes
+  when: ansible_os_family != "Windows"
+
+# ==================== BACKUP ====================
+- name: "Tạo backup trên remote host"
+  ansible.builtin.shell: |
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="/var/tmp/backup_${TIMESTAMP}.tar.gz"
+    tar -czf "$BACKUP_FILE" \
+      /etc/ssh/ \
+      /etc/pam.d/ \
+      /etc/security/ \
+      /etc/login.defs \
+      /etc/sudoers \
+      /etc/sudoers.d/ \
+      /etc/sysctl.conf \
+      /etc/sysctl.d/ \
+      /etc/fstab \
+      /etc/audit/ \
+      /etc/rsyslog.conf \
+      /etc/default/grub \
+      /boot/grub2/grubenv \
+      2>/dev/null || true
+    
+    echo "$BACKUP_FILE"
+  register: backup_file_path
+  become: true
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+
+- name: "Copy backup về Ansible Controller"
+  ansible.builtin.fetch:
+    src: "{{ backup_file_path.stdout }}"
+    dest: "{{ playbook_dir }}/../roles/scap_check/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.tar.gz"
+    flat: yes
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+    - backup_file_path.stdout is defined
+    - backup_file_path.stdout | length > 0
+
+- name: "Hiển thị thông tin backup"
+  ansible.builtin.debug:
+    msg: |
+      💾 ===== BACKUP INFO =====
+      Remote backup: {{ backup_file_path.stdout }}
+      Local backup:  {{ playbook_dir }}/../roles/scap_check/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
+      
+      🔙 Để restore (trên remote host):
+      sudo tar -xzf {{ backup_file_path.stdout }} -C /
+      sudo systemctl restart sshd
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+    - backup_file_path is defined
+
+# ==================== REMEDIATION ====================
+- name: "Chạy auto-remediation với oscap"
+  ansible.builtin.command: >
+    oscap xccdf eval
+    --remediate
     --fetch-remote-resources
     --profile {{ cis_profile }}
-    --result-id {{ ket_qua_linux.stdout_lines[-1].split()[-1] }}
-    --template ansible
-    --results /var/tmp/scap/linux_results.xml
+    --results /var/tmp/scap/scan_after.xml
+    --report /var/tmp/scap/scan_after.html
     {{ scap_files.files[0].path }}
-  register: remediation_out
+  register: ket_qua_remediate
+  changed_when: true
+  failed_when: ket_qua_remediate.rc not in [0, 2]
   become: true
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+  ignore_errors: yes
 
+# ==================== SCAN SAU KHI FIX ====================
+- name: "Đếm số lỗi FAIL (sau fix)"
+  ansible.builtin.shell: |
+    sed -n 's/.*<result>\([^<]*\)<\/result>.*/\1/p' /var/tmp/scap/scan_after.xml | grep -c "^fail$" || echo "0"
+  register: failed_after
+  changed_when: false
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
 
-- name: "Lưu remediation playbook ra file trên host"
-  copy:
-    content: "{{ remediation_out.stdout }}"
-    dest: "/var/tmp/scap/remediation_{{ inventory_hostname }}.yml"
+- name: "Đếm số PASS (sau fix)"
+  ansible.builtin.shell: |
+    sed -n 's/.*<result>\([^<]*\)<\/result>.*/\1/p' /var/tmp/scap/scan_after.xml | grep -c "^pass$" || echo "0"
+  register: passed_after
+  changed_when: false
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+
+# ==================== COPY REPORT SAU FIX ====================
+- name: "Copy báo cáo SAU FIX về Ansible Controller"
+  ansible.builtin.fetch:
+    src: /var/tmp/scap/scan_after.html
+    dest: "{{ playbook_dir }}/../roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
+    flat: yes
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+
+# ==================== THỐNG KÊ SO SÁNH ====================
+- name: "Tính toán số lỗi đã fix"
+  ansible.builtin.set_fact:
+    errors_fixed: "{{ (failed_before.stdout | int) - (failed_after.stdout | default(failed_before.stdout) | int) }}"
+    fix_percentage: "{{ (((failed_before.stdout | int) - (failed_after.stdout | default(failed_before.stdout) | int)) / (failed_before.stdout | int) * 100) | round(1) if (failed_before.stdout | int) > 0 else 0 }}"
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+
+- name: "📊 Hiển thị thống kê SO SÁNH TRƯỚC/SAU"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║           📊 THỐNG KÊ KẾT QUẢ OPENSCAN & REMEDIATION          ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      🖥️  Host Information:
+      ├─ Hostname:     {{ inventory_hostname }}
+      ├─ IP Address:   {{ ansible_default_ipv4.address | default('N/A') }}
+      └─ OS:           {{ ansible_distribution }} {{ ansible_distribution_version }}
+      
+      📋 Profile: {{ cis_profile }}
+      
+      ┌─────────────────────────────────────────────────────────────────┐
+      │                    TRƯỚC FIX vs SAU FIX                         │
+      ├─────────────────┬──────────────┬──────────────┬─────────────────┤
+      │ Metric          │ TRƯỚC        │ SAU          │ THAY ĐỔI        │
+      ├─────────────────┼──────────────┼──────────────┼─────────────────┤
+      │ ✅ PASSED       │ {{ '%12s' | format(passed_before.stdout) }} │ {{ '%12s' | format(passed_after.stdout | default('N/A')) }} │ {{ '%15s' | format('+' + ((passed_after.stdout | default('0') | int) - (passed_before.stdout | int)) | string if auto_remediate | default(false) else 'N/A') }} │
+      │ ❌ FAILED       │ {{ '%12s' | format(failed_before.stdout) }} │ {{ '%12s' | format(failed_after.stdout | default('N/A')) }} │ {{ '%15s' | format('-' + errors_fixed | string if auto_remediate | default(false) else 'N/A') }} │
+      │ 📈 TOTAL        │ {{ '%12s' | format((passed_before.stdout | int) + (failed_before.stdout | int)) }} │ {{ '%12s' | format((passed_after.stdout | default('0') | int) + (failed_after.stdout | default('0') | int)) }} │                 │
+      └─────────────────┴──────────────┴──────────────┴─────────────────┘
+      
+      {% if auto_remediate | default(false) %}
+      🎯 Remediation Results:
+      ├─ Errors Fixed:     {{ errors_fixed }} / {{ failed_before.stdout }}
+      ├─ Fix Success Rate: {{ fix_percentage }}%
+      └─ Status:           {% if fix_percentage | float > 70 %}✅ EXCELLENT{% elif fix_percentage | float > 50 %}⚠️  GOOD{% elif fix_percentage | float > 0 %}⚠️  NEEDS REVIEW{% else %}❌ FAILED{% endif %}
+      
+      {% endif %}
+      📂 Files Saved:
+      ├─ Before Report:  roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_*.html
+      {% if auto_remediate | default(false) %}
+      ├─ After Report:   roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_*.html
+      └─ Backup:         roles/scap_check/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
+      {% else %}
+      └─ (Auto-remediate not enabled)
+      {% endif %}
+      
+      {% if not auto_remediate | default(false) %}
+      💡 Để chạy auto-fix:
+      ansible-playbook playbooks/scap_check.yml -e "auto_remediate=true"
+      {% endif %}
+      
+      ═══════════════════════════════════════════════════════════════════
+  when: ansible_os_family != "Windows"
+
+# ==================== CẢNH BÁO NẾU CÓ VẤN ĐỀ ====================
+- name: "⚠️  CẢNH BÁO: Tình trạng xấu đi sau remediation"
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════╗
+      ║                    ⚠️  WARNING ⚠️                          ║
+      ╚════════════════════════════════════════════════════════════╝
+      
+      Số lỗi TĂNG sau khi remediation!
+      Trước: {{ failed_before.stdout }} lỗi
+      Sau:   {{ failed_after.stdout }} lỗi
+      
+      🔙 NÊN RESTORE BACKUP NGAY:
+      
+      1. Trên remote host:
+         sudo tar -xzf {{ backup_file_path.stdout | default('/var/tmp/backup_*.tar.gz') }} -C /
+         sudo systemctl restart sshd
+         sudo reboot
+      
+      2. Hoặc từ controller:
+         scp roles/scap_check/backup/{{ inventory_hostname }}_*_backup_*.tar.gz {{ ansible_user }}@{{ ansible_default_ipv4.address }}:/tmp/
+         ssh {{ ansible_user }}@{{ ansible_default_ipv4.address }} 'sudo tar -xzf /tmp/backup_*.tar.gz -C / && sudo reboot'
+  when:
+    - ansible_os_family != "Windows"
+    - auto_remediate | default(false) | bool
+    - failed_after.stdout | int > failed_before.stdout | int
+
+# ==================== TẠO FILE SUMMARY ====================
+- name: "Tạo file summary report"
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: |
+      ═══════════════════════════════════════════════════════════════
+                    SCAP COMPLIANCE SUMMARY REPORT
+      ═══════════════════════════════════════════════════════════════
+      
+      Host Information:
+      ─────────────────────────────────────────────────────────────
+      Hostname:          {{ inventory_hostname }}
+      IP Address:        {{ ansible_default_ipv4.address | default('N/A') }}
+      Operating System:  {{ ansible_distribution }} {{ ansible_distribution_version }}
+      Scan Date:         {{ lookup('pipe', 'date "+%Y-%m-%d %H:%M:%S"') }}
+      Profile:           {{ cis_profile }}
+      
+      Scan Results BEFORE Remediation:
+      ─────────────────────────────────────────────────────────────
+      ✅ PASSED:         {{ passed_before.stdout }}
+      ❌ FAILED:         {{ failed_before.stdout }}
+      📈 TOTAL CHECKS:   {{ (passed_before.stdout | int) + (failed_before.stdout | int) }}
+      
+      {% if auto_remediate | default(false) %}
+      Scan Results AFTER Remediation:
+      ─────────────────────────────────────────────────────────────
+      ✅ PASSED:         {{ passed_after.stdout }}
+      ❌ FAILED:         {{ failed_after.stdout }}
+      📈 TOTAL CHECKS:   {{ (passed_after.stdout | int) + (failed_after.stdout | int) }}
+      
+      Remediation Summary:
+      ─────────────────────────────────────────────────────────────
+      Errors Fixed:      {{ errors_fixed }} out of {{ failed_before.stdout }}
+      Success Rate:      {{ fix_percentage }}%
+      Status:            {% if fix_percentage | float > 70 %}✅ EXCELLENT{% elif fix_percentage | float > 50 %}⚠️  GOOD{% elif fix_percentage | float > 0 %}⚠️  NEEDS REVIEW{% else %}❌ FAILED{% endif %}
+      
+      {% endif %}
+      Files Generated:
+      ─────────────────────────────────────────────────────────────
+      Before Report:     {{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_*.html
+      {% if auto_remediate | default(false) %}
+      After Report:      {{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_*.html
+      Backup File:       {{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
+      {% endif %}
+      
+      ═══════════════════════════════════════════════════════════════
+    dest: "{{ playbook_dir }}/../roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_SUMMARY_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.txt"
     mode: '0644'
-  become: true
-
-- name: "Chạy remediation playbook để fix các lỗi bảo mật trên host"
-  command: ansible-playbook /var/tmp/scap/remediation_{{ inventory_hostname }}.yml
-  args:
-    chdir: /var/tmp/scap
-  become: true
+  when: ansible_os_family != "Windows"

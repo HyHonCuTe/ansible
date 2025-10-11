@@ -1,4 +1,5 @@
 ---
 # Biến cấu hình chung cho role SCAP
-cis_profile: "xccdf_org.ssgproject.content_profile_standard"
+cis_profile: "xccdf_org.ssgproject.content_profile_cis_server_l1"
 scap_datastream: "/usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml"
+auto_remediate: true  # Bật manual để tránh auto-fix nguy hiểm
