@@ -1,0 +1,106 @@
+ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 \
+    -o HostKeyAlgorithms=+ssh-rsa \
+    -o Ciphers=+3des-cbc \
+    cisco@192.168.1.30
+------------------------------ssh với sw đời cũ
+
+
+------------------------------config trước trên sw
+
+conf t
+hostname 
+ip domain-name mydomain.local
+crypto key generate rsa modulus 1024
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 2
+username cisco privilege 15 secret cisco123
+line vty 0 4
+transport input ssh
+login local
+interface vlan 1
+ip address 172.16.1.222 255.255.255.0
+no shutdown
+exit
+ip default-gateway 172.16.1.1
+end
+wr
+
+------------------------------test PING
+ansible switches -m ping
+
+
+------------------------------test show version
+ansible switches -m ios_command -a "commands='show version'"
+
+
+
+
+--------------------------------------------------------------------------
+file cấu hình sẵn demo để config cho 1 thiết bị, định dạng sẵn như trên
+--------------------------------------------------------------------------
+! Đặt hostname và domain
+hostname SW-Access-01
+ip domain-name company.local
+
+! Tạo khóa SSH RSA 1024 bit
+crypto key generate rsa modulus 1024
+
+! Bật SSH version 2
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 2
+
+! Tạo user đăng nhập
+username admin privilege 15 secret Admin@123
+enable secret Admin@123
+
+! Gán IP cho VLAN1 để quản lý
+interface vlan1
+ ip address 192.168.1.10 255.255.255.0
+ no shutdown
+
+! Default Gateway
+ip default-gateway 192.168.1.1
+
+! Cấu hình VTY cho phép SSH, yêu cầu đăng nhập local
+line vty 0 4
+ transport input ssh
+ login local
+ exec-timeout 5 0
+ privilege level 15
+
+! Cấu hình tên các interface access (VD: g0/1 - g0/4)
+interface range gigabitEthernet 0/1 - 4
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ storm-control broadcast level 5.00
+ storm-control multicast level 5.00
+ storm-control action shutdown
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation restrict
+ switchport port-security mac-address sticky
+
+! VLAN
+vlan 10
+ name USERS
+
+vlan 20
+ name SERVERS
+
+! Cấu hình trunk (VD: g0/24 dùng để uplink về core switch)
+interface gigabitEthernet0/24
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ spanning-tree portfast trunk
+ description Uplink-to-Core
+
+! Spanning Tree
+spanning-tree mode rapid-pvst
+
+! Lưu cấu hình
+do write memory
+--------------------------------------------------------------------------

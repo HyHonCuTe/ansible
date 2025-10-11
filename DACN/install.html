@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hướng dẫn cài đặt Ansible và tạo Role đầu tiên">
+    <meta name="author" content="HyHonCuTe">
+    <title>Ansible Installation & First Role - HyHonCuTe</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --dark: #2c3e50;
+            --light: #f8f9fa;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            padding-bottom: 50px;
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            animation: fadeInDown 0.8s ease;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.95;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+        
+        .header .meta {
+            margin-top: 15px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: -30px auto 50px;
+            padding: 0 20px;
+            position: relative;
+        }
+        
+        /* Navigation tabs */
+        .nav-tabs {
+            display: flex;
+            background: white;
+            border-radius: 10px 10px 0 0;
+            overflow: hidden;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .nav-tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            background: white;
+            border: none;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: var(--dark);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .nav-tab:hover {
+            background: var(--light);
+        }
+        
+        .nav-tab.active {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .nav-tab i {
+            margin-right: 8px;
+        }
+        
+        /* Content sections */
+        .content-section {
+            background: white;
+            border-radius: 0 0 10px 10px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: none;
+        }
+        
+        .content-section.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        /* OS Cards */
+        .os-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        .os-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 30px;
+            border-radius: 15px;
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .os-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .os-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+        
+        .os-card:hover::before {
+            opacity: 0.05;
+        }
+        
+        .os-card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .os-icon {
+            font-size: 3em;
+            margin-right: 20px;
+            color: var(--primary);
+        }
+        
+        .os-card h3 {
+            font-size: 1.8em;
+            color: var(--dark);
+        }
+        
+        .os-version {
+            display: inline-block;
+            margin-top: 5px;
+            padding: 5px 12px;
+            background: var(--success);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.8em;
+        }
+        
+        /* Code blocks */
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            position: relative;
+            overflow-x: auto;
+        }
+        
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 10px;
+            right: 60px;
+            padding: 5px 15px;
+            background: var(--primary);
+            color: white;
+            border-radius: 5px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95em;
+            line-height: 1.6;
+            display: block;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        
+        .copy-btn:hover {
+            background: #218838;
+            transform: scale(1.05);
+        }
+        
+        /* Step cards */
+        .step-card {
+            background: white;
+            border-left: 5px solid var(--primary);
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .step-number {
+            width: 45px;
+            height: 45px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+        
+        .step-title {
+            font-size: 1.5em;
+            color: var(--dark);
+            font-weight: bold;
+        }
+        
+        /* Alert boxes */
+        .alert {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 5px solid;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            border-color: #0c5460;
+            color: #0c5460;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            border-color: #155724;
+            color: #155724;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            border-color: #856404;
+            color: #856404;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            border-color: #721c24;
+            color: #721c24;
+        }
+        
+        .alert h4 {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        /* Demo section */
+        .demo-preview {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+        
+        .demo-preview h3 {
+            margin-bottom: 15px;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--success);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 9999;
+            animation: slideIn 0.3s ease;
+        }
+        
+        /* File tree */
+        .file-tree {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 20px 0;
+        }
+        
+        .file-tree ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .file-tree li {
+            padding: 5px 0;
+            position: relative;
+        }
+        
+        .file-tree li::before {
+            content: '├─';
+            position: absolute;
+            left: -20px;
+            color: var(--primary);
+        }
+        
+        .file-tree li:last-child::before {
+            content: '└─';
+        }
+        
+        .folder {
+            color: var(--warning);
+            font-weight: bold;
+        }
+        
+        .file {
+            color: var(--info);
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .nav-tabs {
+                flex-direction: column;
+            }
+            
+            .os-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .content-section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i> Copied to clipboard!
+    </div>
+    
+    <!-- Header -->
+    <div class="header">
+        <h1><i class="fas fa-download"></i> Ansible Installation Guide</h1>
+        <p>Hướng dẫn cài đặt Ansible và tạo Role đầu tiên với Demo Ping</p>
+        <div class="meta">
+            <i class="fas fa-user"></i> HyHonCuTe | 
+            <i class="fas fa-calendar"></i> 2025-10-11 16:17:37 UTC |
+            <i class="fas fa-code-branch"></i> v1.0.0
+        </div>
+    </div>
+    
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('installation')">
+                <i class="fas fa-download"></i> Installation
+            </button>
+            <button class="nav-tab" onclick="showTab('demo')">
+                <i class="fas fa-play-circle"></i> Demo Role
+            </button>
+            <button class="nav-tab" onclick="showTab('verify')">
+                <i class="fas fa-check-circle"></i> Verification
+            </button>
+        </div>
+        
+        <!-- Installation Section -->
+        <div id="installation" class="content-section active">
+            <h2 style="margin-bottom: 30px;">
+                <i class="fas fa-download"></i> Cài đặt Ansible
+            </h2>
+            
+            <div class="alert alert-info">
+                <h4><i class="fas fa-info-circle"></i> Ansible là gì?</h4>
+                <p><strong>Ansible</strong> là công cụ tự động hóa IT mã nguồn mở để:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>⚙️ Quản lý cấu hình hệ thống (Configuration Management)</li>
+                    <li>🚀 Triển khai ứng dụng tự động (Application Deployment)</li>
+                    <li>🔄 Orchestration & Provisioning</li>
+                    <li>🔐 Security & Compliance Automation</li>
+                </ul>
+            </div>
+            
+            <h3 style="margin: 30px 0 20px;">
+                <i class="fas fa-laptop"></i> Chọn hệ điều hành của bạn:
+            </h3>
+            
+            <div class="os-grid">
+                <!-- Ubuntu/Debian -->
+                <div class="os-card" onclick="scrollToOS('ubuntu')">
+                    <div class="os-card-header">
+                        <div class="os-icon">
+                            <i class="fab fa-ubuntu"></i>
+                        </div>
+                        <div>
+                            <h3>Ubuntu / Debian</h3>
+                            <span class="os-version">APT</span>
+                        </div>
+                    </div>
+                    <p>Ubuntu 20.04+, Debian 10+</p>
+                </div>
+                
+                <!-- RHEL/AlmaLinux -->
+                <div class="os-card" onclick="scrollToOS('rhel')">
+                    <div class="os-card-header">
+                        <div class="os-icon">
+                            <i class="fab fa-redhat"></i>
+                        </div>
+                        <div>
+                            <h3>RHEL / AlmaLinux</h3>
+                            <span class="os-version">DNF/YUM</span>
+                        </div>
+                    </div>
+                    <p>RHEL 8+, AlmaLinux 8+, Rocky Linux</p>
+                </div>
+                
+                <!-- macOS -->
+                <div class="os-card" onclick="scrollToOS('macos')">
+                    <div class="os-card-header">
+                        <div class="os-icon">
+                            <i class="fab fa-apple"></i>
+                        </div>
+                        <div>
+                            <h3>macOS</h3>
+                            <span class="os-version">Homebrew</span>
+                        </div>
+                    </div>
+                    <p>macOS 10.15+ (Catalina and above)</p>
+                </div>
+                
+                <!-- Windows -->
+                <div class="os-card" onclick="scrollToOS('windows')">
+                    <div class="os-card-header">
+                        <div class="os-icon">
+                            <i class="fab fa-windows"></i>
+                        </div>
+                        <div>
+                            <h3>Windows</h3>
+                            <span class="os-version">WSL</span>
+                        </div>
+                    </div>
+                    <p>Windows 10/11 with WSL2</p>
+                </div>
+            </div>
+            
+            <!-- Ubuntu Installation -->
+            <div id="ubuntu" class="step-card">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">
+                        <i class="fab fa-ubuntu"></i> Ubuntu / Debian
+                    </div>
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Bước 1: Update package list</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>sudo apt update</code><pre></pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 2: Cài đặt Ansible</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Cài đặt từ Ubuntu repository (stable)
+sudo apt install ansible -y
+
+# HOẶC cài version mới nhất từ PPA
+sudo apt install software-properties-common -y
+sudo add-apt-repository --yes --update ppa:ansible/ansible
+sudo apt install ansible -y
+</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 3: Verify installation</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>ansible --version</code><pre>
+                </div>
+                
+                <div class="alert alert-success">
+                    <strong>✅ Expected Output:</strong>
+                    <pre style="margin-top: 10px; background: #f8f9fa; padding: 10px; border-radius: 5px;">ansible [core 2.15.5]
+  config file = /etc/ansible/ansible.cfg
+  python version = 3.10.12</pre>
+                </div>
+            </div>
+            
+            <!-- RHEL/AlmaLinux Installation -->
+            <div id="rhel" class="step-card">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">
+                        <i class="fab fa-redhat"></i> RHEL / AlmaLinux / Rocky Linux
+                    </div>
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Bước 1: Enable EPEL repository</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Cho RHEL/AlmaLinux/Rocky 9
+sudo dnf install epel-release -y
+
+# Cho RHEL/AlmaLinux/Rocky 8
+sudo dnf install epel-release -y
+
+# Cho CentOS 7
+sudo yum install epel-release -y</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 2: Cài đặt Ansible</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># RHEL/AlmaLinux/Rocky 8+
+sudo dnf install ansible -y
+
+# CentOS 7
+sudo yum install ansible -y</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 3: Verify installation</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>ansible --version</code><pre>
+                </div>
+            </div>
+            
+            <!-- macOS Installation -->
+            <div id="macos" class="step-card">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">
+                        <i class="fab fa-apple"></i> macOS
+                    </div>
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Bước 1: Cài đặt Homebrew (nếu chưa có)</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 2: Cài đặt Ansible</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>brew install ansible</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 3: Verify installation</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>ansible --version</code><pre>
+                </div>
+            </div>
+            
+            <!-- Windows Installation -->
+            <div id="windows" class="step-card">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-title">
+                        <i class="fab fa-windows"></i> Windows (WSL2)
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <strong>⚠️ Lưu ý:</strong> Ansible không chạy native trên Windows. Cần sử dụng WSL2 (Windows Subsystem for Linux).
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Bước 1: Cài đặt WSL2</h4>
+                <div class="code-block" data-lang="powershell">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Mở PowerShell as Administrator
+wsl --install
+
+# Restart máy sau khi cài xong</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 2: Cài đặt Ubuntu trên WSL</h4>
+                <div class="code-block" data-lang="powershell">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>wsl --install -d Ubuntu</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Bước 3: Vào Ubuntu và cài Ansible</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Mở Ubuntu từ Start Menu
+# Trong Ubuntu terminal:
+sudo apt update
+sudo apt install ansible -y
+ansible --version</code><pre>
+                </div>
+            </div>
+            
+            <!-- Python PIP Installation -->
+            <div class="step-card" style="border-left-color: #ffc107;">
+                <div class="step-header">
+                    <div class="step-number" style="background: #ffc107;">
+                        <i class="fab fa-python"></i>
+                    </div>
+                    <div class="step-title">
+                        Alternative: Cài đặt qua Python PIP
+                    </div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">Phương pháp này hoạt động trên mọi OS có Python 3.8+</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Cài đặt Python PIP (nếu chưa có)
+# Ubuntu/Debian
+sudo apt install python3-pip -y
+
+# RHEL/AlmaLinux
+sudo dnf install python3-pip -y
+
+# macOS
+brew install python3
+
+# Cài Ansible qua PIP
+python3 -m pip install --user ansible
+
+# Verify
+ansible --version</code><pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Demo Role Section -->
+        <div id="demo" class="content-section">
+            <h2 style="margin-bottom: 30px;">
+                <i class="fas fa-play-circle"></i> Tạo Demo Role với Task Ping
+            </h2>
+            
+            <div class="alert alert-info">
+                <h4><i class="fas fa-cubes"></i> Ansible Role là gì?</h4>
+                <p><strong>Role</strong> là cách tổ chức code Ansible thành các đơn vị có thể tái sử dụng. Mỗi role bao gồm:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>📋 <strong>Tasks:</strong> Các tác vụ cần thực hiện</li>
+                    <li>📁 <strong>Files:</strong> Files tĩnh cần copy</li>
+                    <li>📄 <strong>Templates:</strong> Files động với variables</li>
+                    <li>⚙️ <strong>Defaults:</strong> Biến mặc định</li>
+                    <li>🔧 <strong>Handlers:</strong> Tasks được trigger bởi notify</li>
+                </ul>
+            </div>
+            
+            <!-- Step 1: Create directory structure -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Tạo cấu trúc thư mục</div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">Tạo thư mục dự án Ansible với cấu trúc chuẩn:</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Tạo thư mục chính
+mkdir -p ~/ansible-demo
+cd ~/ansible-demo
+
+# Tạo cấu trúc thư mục
+mkdir -p roles/ping_demo/{tasks,defaults,handlers,files,templates,vars}
+mkdir -p inventory
+mkdir -p playbooks
+
+# Tạo các files cần thiết
+touch roles/ping_demo/tasks/main.yml
+touch roles/ping_demo/defaults/main.yml
+touch inventory/hosts
+touch playbooks/demo.yml
+touch ansible.cfg</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Cấu trúc thư mục sau khi tạo:</h4>
+                <div class="file-tree">
+                    <ul>
+                        <li class="folder"><i class="fas fa-folder"></i> ansible-demo/</li>
+                        <ul>
+                            <li class="file"><i class="fas fa-file-code"></i> ansible.cfg</li>
+                            <li class="folder"><i class="fas fa-folder"></i> inventory/</li>
+                            <ul>
+                                <li class="file"><i class="fas fa-file"></i> hosts</li>
+                            </ul>
+                            <li class="folder"><i class="fas fa-folder"></i> playbooks/</li>
+                            <ul>
+                                <li class="file"><i class="fas fa-file-code"></i> demo.yml</li>
+                            </ul>
+                            <li class="folder"><i class="fas fa-folder"></i> roles/</li>
+                            <ul>
+                                <li class="folder"><i class="fas fa-folder"></i> ping_demo/</li>
+                                <ul>
+                                    <li class="folder"><i class="fas fa-folder"></i> tasks/</li>
+                                    <ul>
+                                        <li class="file"><i class="fas fa-file-code"></i> main.yml</li>
+                                    </ul>
+                                    <li class="folder"><i class="fas fa-folder"></i> defaults/</li>
+                                    <ul>
+                                        <li class="file"><i class="fas fa-file-code"></i> main.yml</li>
+                                    </ul>
+                                    <li class="folder"><i class="fas fa-folder"></i> handlers/</li>
+                                    <li class="folder"><i class="fas fa-folder"></i> files/</li>
+                                    <li class="folder"><i class="fas fa-folder"></i> templates/</li>
+                                    <li class="folder"><i class="fas fa-folder"></i> vars/</li>
+                                </ul>
+                            </ul>
+                        </ul>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Step 2: Create ansible.cfg -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Tạo file ansible.cfg</div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">File cấu hình chính cho Ansible:</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > ansible.cfg << 'EOF'
+[defaults]
+# Inventory file location
+inventory = ./inventory/hosts
+
+# Roles path
+roles_path = ./roles
+
+# Disable host key checking (for demo only - không dùng trong production)
+host_key_checking = False
+
+# Default remote user
+remote_user = ansible
+
+# Output settings
+stdout_callback = yaml
+display_skipped_hosts = False
+
+# Logging
+log_path = ./ansible.log
+
+# Performance
+forks = 10
+gathering = smart
+fact_caching = jsonfile
+fact_caching_connection = /tmp/ansible_facts
+fact_caching_timeout = 86400
+
+[privilege_escalation]
+become = True
+become_method = sudo
+become_user = root
+become_ask_pass = False
+EOF</code><pre>
+                </div>
+            </div>
+            
+            <!-- Step 3: Create inventory -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Tạo file inventory</div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">Định nghĩa các hosts cần quản lý:</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > inventory/hosts << 'EOF'
+# Ansible Inventory - Demo
+# Created: 2025-10-11 16:17:37 UTC
+# Author: HyHonCuTe
+
+[all:vars]
+# Global variables
+ansible_user=admin
+ansible_become=yes
+ansible_python_interpreter=/usr/bin/python3
+
+# Disable SSH key checking (demo only)
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[demo_servers]
+# Local machine (for testing)
+localhost ansible_connection=local
+
+# Remote servers (uncomment and update)
+# server1 ansible_host=192.168.1.10
+# server2 ansible_host=192.168.1.20
+
+[web_servers]
+# Web servers group
+# web1 ansible_host=192.168.1.10
+
+[db_servers]
+# Database servers group
+# db1 ansible_host=192.168.1.20
+EOF</code><pre>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <strong>📝 Lưu ý:</strong> Uncomment và cập nhật IP addresses cho môi trường thực tế của bạn.
+                </div>
+            </div>
+            
+            <!-- Step 4: Create role defaults -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Tạo defaults/main.yml</div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">Định nghĩa các biến mặc định cho role:</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > roles/ping_demo/defaults/main.yml << 'EOF'
+---
+# Default variables for ping_demo role
+# Author: HyHonCuTe
+# Date: 2025-10-11 16:17:37 UTC
+
+# Ping message
+ping_message: "Hello from Ansible!"
+
+# Number of ping attempts
+ping_count: 3
+
+# Enable verbose output
+verbose_output: true
+
+# Target hosts description
+target_description: "Demo Ansible Hosts"
+EOF</code><pre>
+                </div>
+            </div>
+            
+            <!-- Step 5: Create role tasks -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <div class="step-title">Tạo tasks/main.yml (QUAN TRỌNG!)</div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">Định nghĩa các tasks sẽ chạy:</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > roles/ping_demo/tasks/main.yml << 'EOF'
+---
+# Ping Demo Role - Main Tasks
+# Author: HyHonCuTe
+# Date: 2025-10-11 16:17:37 UTC
+
+- name: "Display role information"
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║        ANSIBLE PING DEMO ROLE                  ║
+      ║        Author: HyHonCuTe                       ║
+      ║        Version: 1.0.0                          ║
+      ╚════════════════════════════════════════════════╝
+      
+      Target: {{ target_description }}
+      Message: {{ ping_message }}
+
+- name: "Ping test - Ansible module"
+  ansible.builtin.ping:
+  register: ping_result
+
+- name: "Display ping result"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Ping Result: {{ ping_result.ping }}
+      📡 Host: {{ inventory_hostname }}
+      🌐 IP: {{ ansible_default_ipv4.address | default('N/A') }}
+
+- name: "Gather system information"
+  ansible.builtin.setup:
+  when: verbose_output | bool
+
+- name: "Display system information"
+  ansible.builtin.debug:
+    msg: |
+      🖥️  System Information:
+      ├─ Hostname: {{ ansible_hostname }}
+      ├─ OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+      ├─ Kernel: {{ ansible_kernel }}
+      ├─ Architecture: {{ ansible_architecture }}
+      ├─ CPU Cores: {{ ansible_processor_vcpus }}
+      ├─ Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }} GB
+      └─ Python: {{ ansible_python_version }}
+  when: verbose_output | bool
+
+- name: "Test command execution"
+  ansible.builtin.command: echo "{{ ping_message }}"
+  register: command_result
+  changed_when: false
+
+- name: "Display command result"
+  ansible.builtin.debug:
+    msg: |
+      📢 Command Output: {{ command_result.stdout }}
+      ⏱️  Duration: {{ command_result.delta }}
+
+- name: "Create demo file"
+  ansible.builtin.copy:
+    content: |
+      Ansible Ping Demo
+      =================
+      Date: {{ ansible_date_time.iso8601 }}
+      Host: {{ inventory_hostname }}
+      User: {{ ansible_user_id }}
+      Message: {{ ping_message }}
+    dest: /tmp/ansible_ping_demo.txt
+    mode: '0644'
+
+- name: "Verify file creation"
+  ansible.builtin.stat:
+    path: /tmp/ansible_ping_demo.txt
+  register: demo_file
+
+- name: "Display file information"
+  ansible.builtin.debug:
+    msg: |
+      📄 File created successfully!
+      ├─ Path: {{ demo_file.stat.path }}
+      ├─ Size: {{ demo_file.stat.size }} bytes
+      ├─ Owner: {{ demo_file.stat.pw_name }}
+      └─ Permissions: {{ demo_file.stat.mode }}
+  when: demo_file.stat.exists
+
+- name: "Summary"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════╗
+      ║           ✅ DEMO COMPLETED SUCCESSFULLY       ║
+      ╚════════════════════════════════════════════════╝
+      
+      📊 Tasks Executed:
+      ├─ ✓ Ping test
+      ├─ ✓ System info gathering
+      ├─ ✓ Command execution
+      └─ ✓ File creation
+      
+      🎉 All tests passed!
+EOF</code><pre>
+                </div>
+            </div>
+            
+            <!-- Step 6: Create playbook -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">6</div>
+                    <div class="step-title">Tạo playbook</div>
+                </div>
+                
+                <p style="margin-bottom: 15px;">Playbook để gọi role:</p>
+                
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > playbooks/demo.yml << 'EOF'
+---
+# Ansible Demo Playbook
+# Author: HyHonCuTe
+# Date: 2025-10-11 16:17:37 UTC
+
+- name: "Ansible Ping Demo"
+  hosts: demo_servers
+  gather_facts: yes
+  
+  roles:
+    - role: ping_demo
+      tags:
+        - demo
+        - ping
+        - test
+EOF</code><pre>
+                </div>
+            </div>
+            
+            <!-- Demo Preview -->
+            <div class="demo-preview">
+                <h3><i class="fas fa-eye"></i> Preview: Cấu trúc hoàn chỉnh</h3>
+                <div class="file-tree" style="background: rgba(255,255,255,0.1); color: white;">
+                    <ul>
+                        <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> ansible-demo/</li>
+                        <ul>
+                            <li class="file" style="color: #87ceeb;"><i class="fas fa-file-code"></i> ansible.cfg (✅ Created)</li>
+                            <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> inventory/</li>
+                            <ul>
+                                <li class="file" style="color: #87ceeb;"><i class="fas fa-file"></i> hosts (✅ Created)</li>
+                            </ul>
+                            <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> playbooks/</li>
+                            <ul>
+                                <li class="file" style="color: #87ceeb;"><i class="fas fa-file-code"></i> demo.yml (✅ Created)</li>
+                            </ul>
+                            <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> roles/</li>
+                            <ul>
+                                <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> ping_demo/</li>
+                                <ul>
+                                    <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> tasks/</li>
+                                    <ul>
+                                        <li class="file" style="color: #87ceeb;"><i class="fas fa-file-code"></i> main.yml (✅ Created)</li>
+                                    </ul>
+                                    <li class="folder" style="color: #ffd700;"><i class="fas fa-folder"></i> defaults/</li>
+                                    <ul>
+                                        <li class="file" style="color: #87ceeb;"><i class="fas fa-file-code"></i> main.yml (✅ Created)</li>
+                                    </ul>
+                                </ul>
+                            </ul>
+                        </ul>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Verification Section -->
+        <div id="verify" class="content-section">
+            <h2 style="margin-bottom: 30px;">
+                <i class="fas fa-check-circle"></i> Chạy và Verify
+            </h2>
+            
+            <!-- Run demo -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Chạy Demo Role</div>
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Syntax check trước:</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cd ~/ansible-demo
+
+# Check syntax
+ansible-playbook playbooks/demo.yml --syntax-check</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Chạy playbook:</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Chạy trên localhost
+ansible-playbook playbooks/demo.yml
+
+# Với verbose output
+ansible-playbook playbooks/demo.yml -v
+
+# Chỉ chạy specific tags
+ansible-playbook playbooks/demo.yml --tags ping
+
+# Dry-run (không thực hiện thật)
+ansible-playbook playbooks/demo.yml --check</code><pre>
+                </div>
+                
+                <div class="alert alert-success">
+                    <h4>✅ Expected Output:</h4>
+                    <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto;">PLAY [Ansible Ping Demo] **************************************************
+
+TASK [Gathering Facts] ****************************************************
+ok: [localhost]
+
+TASK [ping_demo : Display role information] *******************************
+ok: [localhost] => {
+    "msg": "╔════════════════════════════════════════════════╗
+            ║        ANSIBLE PING DEMO ROLE                  ║
+            ╚════════════════════════════════════════════════╝"
+}
+
+TASK [ping_demo : Ping test - Ansible module] *****************************
+ok: [localhost]
+
+TASK [ping_demo : Display ping result] ************************************
+ok: [localhost] => {
+    "msg": "✅ Ping Result: pong\n📡 Host: localhost\n🌐 IP: 192.168.1.100\n"
+}
+
+...
+
+PLAY RECAP ****************************************************************
+localhost                  : ok=9    changed=1    unreachable=0    failed=0</pre>
+                </div>
+            </div>
+            
+            <!-- Verify results -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Verify kết quả</div>
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Kiểm tra file đã tạo:</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Xem file demo
+cat /tmp/ansible_ping_demo.txt
+
+# Output:
+# Ansible Ping Demo
+# =================
+# Date: 2025-10-11T16:17:37Z
+# Host: localhost
+# User: hyhoncute
+# Message: Hello from Ansible!</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Xem Ansible logs:</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Xem logs
+tail -50 ansible.log
+
+# Xem facts đã gather
+ls -lh /tmp/ansible_facts/</code><pre>
+                </div>
+            </div>
+            
+            <!-- Advanced usage -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Sử dụng nâng cao</div>
+                </div>
+                
+                <h4 style="margin-bottom: 15px;">Chạy với custom variables:</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Override biến mặc định
+ansible-playbook playbooks/demo.yml \
+  -e "ping_message='Custom message from CLI'" \
+  -e "verbose_output=false"
+
+# Chạy trên specific host group
+ansible-playbook playbooks/demo.yml --limit web_servers
+
+# Chạy với multiple inventory
+ansible-playbook playbooks/demo.yml -i inventory/hosts -i inventory/production</code><pre>
+                </div>
+                
+                <h4 style="margin: 20px 0 15px;">Debug và troubleshooting:</h4>
+                <div class="code-block" data-lang="bash">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Verbose levels
+ansible-playbook playbooks/demo.yml -v    # Basic
+ansible-playbook playbooks/demo.yml -vv   # More details
+ansible-playbook playbooks/demo.yml -vvv  # Connection debugging
+ansible-playbook playbooks/demo.yml -vvvv # Everything
+
+# Step by step execution
+ansible-playbook playbooks/demo.yml --step
+
+# Start at specific task
+ansible-playbook playbooks/demo.yml --start-at-task="Ping test"
+
+# List all tasks
+ansible-playbook playbooks/demo.yml --list-tasks
+
+# List all hosts
+ansible-playbook playbooks/demo.yml --list-hosts</code><pre>
+                </div>
+            </div>
+            
+            <!-- Next steps -->
+            <div class="alert alert-info">
+                <h4><i class="fas fa-graduation-cap"></i> Bước tiếp theo</h4>
+                <p>Sau khi đã làm quen với demo role, bạn có thể:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>📚 Học thêm về <a href="https://docs.ansible.com/ansible/latest/user_guide/playbooks_reuse_roles.html" target="_blank">Ansible Roles</a></li>
+                    <li>🔐 Triển khai <a href="index.html#roles">scap_check role</a> cho security scanning</li>
+                    <li>🚀 Tạo roles riêng cho infrastructure của bạn</li>
+                    <li>📖 Đọc <a href="README.md">documentation</a> đầy đủ</li>
+                </ul>
+            </div>
+            
+            <!-- Quick reference -->
+            <div class="demo-preview">
+                <h3><i class="fas fa-terminal"></i> Command Quick Reference</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                        <h4 style="color: white; margin-bottom: 10px;">📋 Basic Commands</h4>
+                        <code style="display: block; margin: 5px 0;">ansible --version</code><pre>
+                        <code style="display: block; margin: 5px 0;">ansible all -m ping</code><pre>
+                        <code style="display: block; margin: 5px 0;">ansible-playbook demo.yml</code><pre>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                        <h4 style="color: white; margin-bottom: 10px;">🔍 Debugging</h4>
+                        <code style="display: block; margin: 5px 0;">--syntax-check</code><pre>
+                        <code style="display: block; margin: 5px 0;">--check (dry-run)</code><pre>
+                        <code style="display: block; margin: 5px 0;">-vvv (verbose)</code><pre>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                        <h4 style="color: white; margin-bottom: 10px;">🎯 Targeting</h4>
+                        <code style="display: block; margin: 5px 0;">--limit host1,host2</code><pre>
+                        <code style="display: block; margin: 5px 0;">--tags tag1,tag2</code><pre>
+                        <code style="display: block; margin: 5px 0;">-e "var=value"</code><pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Tab switching
+        function showTab(tabName) {
+            // Hide all content sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected content section
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.closest('.nav-tab').classList.add('active');
+        }
+        
+        // Scroll to OS section
+        function scrollToOS(osId) {
+            showTab('installation');
+            setTimeout(() => {
+                document.getElementById(osId).scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }, 100);
+        }
+        
+        // Copy code function
+        function copyCode(button) {
+            const codeBlock = button.parentElement;
+            const code = codeBlock.querySelector('code').textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                // Show toast
+                const toast = document.getElementById('toast');
+                toast.style.display = 'block';
+                
+                // Change button text
+                const originalText = button.textContent;
+                button.textContent = '✓ Copied!';
+                button.style.background = '#28a745';
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    button.textContent = originalText;
+                    button.style.background = '#28a745';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+        
+        // Add animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.animation = 'fadeIn 0.6s ease both';
+                }
+            });
+        }, observerOptions);
+        
+        // Observe all step cards
+        document.querySelectorAll('.step-card, .os-card, .alert').forEach(el => {
+            observer.observe(el);
+        });
+    </script>
+</body>
+</html>
