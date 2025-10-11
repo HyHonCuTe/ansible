@@ -1,13 +1,9 @@
-- name: "Cài đặt gói OpenSCAP (Linux)"
+- name: "Cài đặt gói OpenSCAP"
   ansible.builtin.package:
-    name: "{{ ten_goi }}"
+    name:
+      - openscap-scanner
+      - scap-security-guide
     state: present
-  loop:
-    - openscap-scanner
-    - scap-security-guide
-  loop_control:
-    loop_var: ten_goi
-  when: ansible_os_family != "Windows"
 
 - name: "Tạo thư mục lưu kết quả kiểm tra trên máy đích (Linux)"
   ansible.builtin.file:
@@ -34,7 +30,7 @@
   ansible.builtin.command: >
     oscap xccdf eval
     --fetch-remote-resources
-    --profile {{ cis_profile | default('xccdf_org.ssgproject.content_profile_cis') }}
+    --profile {{ cis_profile}}
     --results /var/tmp/scap/linux_results.xml
     --report /var/tmp/scap/linux_report.html
     {{ scap_files.files[0].path }}
@@ -43,17 +39,42 @@
   failed_when: ket_qua_linux.rc == 1
   when: ansible_os_family != "Windows"
 
-- name: "Create results directory on Ansible Controller"
-  ansible.builtin.file:
-    path: roles/scap_check/results
-    state: directory
-    mode: '0755'
+- name: "Tạo thư mục lưu kết quả trên Ansible Controller"
   delegate_to: localhost
   run_once: true
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../roles/scap_check/results"
+    state: directory
+    mode: '0775'
 
 - name: "Copy kết quả từ host Linux về Ansible Controller"
   ansible.builtin.fetch:
     src: /var/tmp/scap/linux_report.html
-    dest: roles/scap_check/results/linux_{{ inventory_hostname }}.html
+    dest: "{{ playbook_dir }}/../roles/scap_check/results/linux_{{ inventory_hostname }}_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
     flat: yes
-  when: ansible_os_family != "Windows"
+
+- name: "Sinh remediation playbook từ kết quả scan (Linux)"
+  command: >
+    oscap xccdf generate fix
+    --fetch-remote-resources
+    --profile {{ cis_profile }}
+    --result-id {{ ket_qua_linux.stdout_lines[-1].split()[-1] }}
+    --template ansible
+    --results /var/tmp/scap/linux_results.xml
+    {{ scap_files.files[0].path }}
+  register: remediation_out
+  become: true
+
+
+- name: "Lưu remediation playbook ra file trên host"
+  copy:
+    content: "{{ remediation_out.stdout }}"
+    dest: "/var/tmp/scap/remediation_{{ inventory_hostname }}.yml"
+    mode: '0644'
+  become: true
+
+- name: "Chạy remediation playbook để fix các lỗi bảo mật trên host"
+  command: ansible-playbook /var/tmp/scap/remediation_{{ inventory_hostname }}.yml
+  args:
+    chdir: /var/tmp/scap
+  become: true
