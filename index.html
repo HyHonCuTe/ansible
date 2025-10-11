@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ansible Automation Project - Security Compliance & System Management">
+    <meta name="author" content="HyHonCuTe">
+    <title>Ansible Project - HyHonCuTe</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --dark: #2c3e50;
+            --light: #f8f9fa;
+            --white: #ffffff;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+        }
+        
+        /* Header/Hero Section */
+        .hero {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+            color: white;
+            padding: 80px 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120"><path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z" opacity=".25" fill="%23fff"></path><path d="M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5,22.43-10.89,48-26.93,60.65-49.24V0Z" opacity=".5" fill="%23fff"></path><path d="M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z" fill="%23fff"></path></svg>') no-repeat bottom;
+            background-size: cover;
+            opacity: 0.3;
+        }
+        
+        .hero h1 {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            animation: fadeInDown 1s ease;
+        }
+        
+        .hero p {
+            font-size: 1.3em;
+            margin-bottom: 30px;
+            animation: fadeInUp 1s ease 0.3s both;
+        }
+        
+        .hero-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeInUp 1s ease 0.6s both;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: white;
+            color: var(--primary);
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: var(--primary);
+        }
+        
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: -50px auto 50px;
+            padding: 0 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Stats Section */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 50px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-card i {
+            font-size: 3em;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        .stat-card h3 {
+            font-size: 2.5em;
+            color: var(--dark);
+            margin-bottom: 10px;
+        }
+        
+        .stat-card p {
+            color: #666;
+        }
+        
+        /* Features Section */
+        .section {
+            background: white;
+            border-radius: 15px;
+            padding: 50px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            font-size: 2.5em;
+            color: var(--dark);
+            margin-bottom: 30px;
+            text-align: center;
+            position: relative;
+            padding-bottom: 15px;
+        }
+        
+        .section h2::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 2px;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .feature-card {
+            padding: 30px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.2);
+            transform: translateY(-5px);
+        }
+        
+        .feature-card i {
+            font-size: 2.5em;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        .feature-card h3 {
+            color: var(--dark);
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .feature-card p {
+            color: #666;
+            line-height: 1.8;
+        }
+        
+        /* Roles Section */
+        .roles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .role-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .role-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            transform: rotate(45deg);
+        }
+        
+        .role-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .role-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .role-icon {
+            font-size: 3em;
+            margin-right: 20px;
+            background: rgba(255,255,255,0.2);
+            padding: 20px;
+            border-radius: 15px;
+        }
+        
+        .role-header h3 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        
+        .role-status {
+            display: inline-block;
+            padding: 5px 15px;
+            background: var(--success);
+            border-radius: 20px;
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+        
+        .role-card p {
+            margin-bottom: 20px;
+            line-height: 1.8;
+            position: relative;
+        }
+        
+        .role-features {
+            list-style: none;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .role-features li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+        
+        .role-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #4ade80;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .role-links {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+            position: relative;
+        }
+        
+        .role-link {
+            flex: 1;
+            text-align: center;
+            padding: 12px 20px;
+            background: white;
+            color: var(--primary);
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .role-link:hover {
+            background: rgba(255,255,255,0.9);
+            transform: scale(1.05);
+        }
+        
+        .role-link i {
+            margin-right: 5px;
+        }
+        
+        /* Quick Start Section */
+        .quick-start {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 40px;
+            border-radius: 15px;
+            border-left: 5px solid var(--primary);
+        }
+        
+        .quick-start h3 {
+            color: var(--dark);
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 15px 0;
+            position: relative;
+            overflow-x: auto;
+        }
+        
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 15px;
+            background: var(--primary);
+            color: white;
+            border-radius: 5px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95em;
+            line-height: 1.6;
+            display: block;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: #218838;
+        }
+        
+        /* Tech Stack */
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .tech-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 25px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .tech-badge:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+        
+        .tech-badge i {
+            margin-right: 10px;
+            color: var(--primary);
+            font-size: 1.5em;
+        }
+        
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+        
+        .timeline-item {
+            display: flex;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        
+        .timeline-marker {
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+        
+        .timeline-content {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            flex-grow: 1;
+        }
+        
+        .timeline-content h4 {
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 50px 20px 20px;
+            margin-top: 50px;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+        }
+        
+        .footer-section h3 {
+            margin-bottom: 20px;
+            color: white;
+        }
+        
+        .footer-section ul {
+            list-style: none;
+        }
+        
+        .footer-section ul li {
+            padding: 8px 0;
+        }
+        
+        .footer-section a {
+            color: #bbb;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .footer-section a:hover {
+            color: white;
+        }
+        
+        .social-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .social-links a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 45px;
+            height: 45px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            color: white;
+            font-size: 1.3em;
+            transition: all 0.3s ease;
+        }
+        
+        .social-links a:hover {
+            background: var(--primary);
+            transform: translateY(-3px);
+        }
+        
+        .footer-bottom {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            color: #bbb;
+        }
+        
+        /* Animations */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5em;
+            }
+            
+            .hero p {
+                font-size: 1.1em;
+            }
+            
+            .section {
+                padding: 30px 20px;
+            }
+            
+            .roles-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .footer-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--success);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 9999;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i> Copied to clipboard!
+    </div>
+    
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1><i class="fas fa-robot"></i> Ansible Automation Project</h1>
+        <p>Security Compliance, System Management & Infrastructure as Code</p>
+        <div class="hero-buttons">
+            <a href="https://github.com/HyHonCuTe/ansible" class="btn" target="_blank">
+                <i class="fab fa-github"></i> View on GitHub
+            </a>
+            <a href="#install-ansible" class="btn btn-secondary">
+                <i class="fas fa-rocket"></i> Install Ansible
+            </a>
+            <a href="#roles" class="btn btn-secondary">
+                <i class="fas fa-cubes"></i> Browse Roles
+            </a>
+        </div>
+    </section>
+    
+    <!-- Stats Section -->
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card">
+                <i class="fas fa-cubes"></i>
+                <h3>5+</h3>
+                <p>Ansible Roles</p>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-server"></i>
+                <h3>100+</h3>
+                <p>Managed Hosts</p>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-shield-alt"></i>
+                <h3>99%</h3>
+                <p>Security Score</p>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-clock"></i>
+                <h3>10min</h3>
+                <p>Deployment Time</p>
+            </div>
+        </div>
+        
+        <!-- About Section -->
+        <section class="section">
+            <h2><i class="fas fa-info-circle"></i> Giới thiệu Dự án</h2>
+            <p style="text-align: center; font-size: 1.1em; color: #666; max-width: 800px; margin: 20px auto;">
+                Dự án Ansible này cung cấp các roles tự động hóa để quản lý, cấu hình và bảo mật hệ thống Linux. 
+                Đặc biệt tập trung vào <strong>Security Compliance</strong> với OpenSCAP, giúp đảm bảo hệ thống 
+                tuân thủ các tiêu chuẩn bảo mật như CIS, STIG, PCI-DSS, HIPAA...
+            </p>
+            
+            <div class="features">
+                <div class="feature-card">
+                    <i class="fas fa-bolt"></i>
+                    <h3>Tự động hóa</h3>
+                    <p>Triển khai hàng loạt cấu hình trên nhiều servers cùng lúc, tiết kiệm thời gian và giảm thiểu lỗi thủ công.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>Bảo mật cao</h3>
+                    <p>Scan và khắc phục tự động các lỗ hổng bảo mật theo chuẩn CIS, STIG, PCI-DSS với OpenSCAP.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-code-branch"></i>
+                    <h3>Infrastructure as Code</h3>
+                    <p>Quản lý cấu hình hệ thống dưới dạng code, dễ dàng version control và rollback khi cần.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Báo cáo chi tiết</h3>
+                    <p>Tạo báo cáo HTML đẹp mắt với thống kê trước/sau, giúp dễ dàng theo dõi compliance.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-database"></i>
+                    <h3>Backup tự động</h3>
+                    <p>Tự động backup cấu hình trước khi thay đổi, đảm bảo có thể rollback nhanh chóng.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-expand-arrows-alt"></i>
+                    <h3>Mở rộng dễ dàng</h3>
+                    <p>Cấu trúc roles rõ ràng, dễ dàng thêm roles mới hoặc tùy chỉnh theo nhu cầu.</p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Tech Stack -->
+        <section class="section">
+            <h2><i class="fas fa-tools"></i> Tech Stack</h2>
+            <div class="tech-stack">
+                <div class="tech-badge">
+                    <i class="fas fa-robot"></i>
+                    <span>Ansible 2.9+</span>
+                </div>
+                <div class="tech-badge">
+                    <i class="fab fa-python"></i>
+                    <span>Python 3.6+</span>
+                </div>
+                <div class="tech-badge">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>OpenSCAP</span>
+                </div>
+                <div class="tech-badge">
+                    <i class="fab fa-linux"></i>
+                    <span>AlmaLinux 9</span>
+                </div>
+                <div class="tech-badge">
+                    <i class="fas fa-terminal"></i>
+                    <span>Bash Scripting</span>
+                </div>
+                <div class="tech-badge">
+                    <i class="fab fa-git-alt"></i>
+                    <span>Git Version Control</span>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Roles Section -->
+        <section class="section" id="roles">
+            <h2><i class="fas fa-cubes"></i> Ansible Roles</h2>
+            
+            <div class="roles-grid">
+                <!-- SCAP Check Role -->
+                <div class="role-card">
+                    <div class="role-header">
+                        <div class="role-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div>
+                            <h3>scap_check</h3>
+                            <span class="role-status">✅ Production Ready</span>
+                        </div>
+                    </div>
+                    <p>
+                        <strong>Security Compliance Scanning & Remediation</strong><br>
+                        Scan và tự động khắc phục các lỗ hổng bảo mật theo các tiêu chuẩn quốc tế.
+                    </p>
+                    <ul class="role-features">
+                        <li>Scan với CIS, STIG, PCI-DSS, HIPAA</li>
+                        <li>Tự động fix lỗi bảo mật</li>
+                        <li>Báo cáo HTML trước/sau</li>
+                        <li>Backup tự động</li>
+                        <li>Thống kê chi tiết</li>
+                    </ul>
+                    <div class="role-links">
+                        <a href="./openscap.html" class="role-link">
+                            <i class="fas fa-book"></i> Docs
+                        </a>
+                        <a href="openscap-guide.html" class="role-link">
+                            <i class="fas fa-graduation-cap"></i> Guide
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Placeholder cho roles khác -->
+                <div class="role-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="role-header">
+                        <div class="role-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div>
+                            <h3>web_server</h3>
+                            <span class="role-status" style="background: #ffc107;">🚧 Coming Soon</span>
+                        </div>
+                    </div>
+                    <p>
+                        <strong>Web Server Setup & Configuration</strong><br>
+                        Tự động cài đặt và cấu hình Nginx/Apache với SSL, firewall, và security hardening.
+                    </p>
+                    <ul class="role-features">
+                        <li>Nginx/Apache auto-config</li>
+                        <li>SSL/TLS với Let's Encrypt</li>
+                        <li>Firewall rules</li>
+                        <li>Performance tuning</li>
+                        <li>Log rotation</li>
+                    </ul>
+                    <div class="role-links">
+                        <a href="#" class="role-link" style="opacity: 0.6; cursor: not-allowed;">
+                            <i class="fas fa-book"></i> Docs
+                        </a>
+                        <a href="#" class="role-link" style="opacity: 0.6; cursor: not-allowed;">
+                            <i class="fas fa-graduation-cap"></i> Guide
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="role-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <div class="role-header">
+                        <div class="role-icon">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div>
+                            <h3>database</h3>
+                            <span class="role-status" style="background: #ffc107;">🚧 Coming Soon</span>
+                        </div>
+                    </div>
+                    <p>
+                        <strong>Database Management</strong><br>
+                        Tự động setup và quản lý MySQL/PostgreSQL với backup, replication và security.
+                    </p>
+                    <ul class="role-features">
+                        <li>MySQL/PostgreSQL setup</li>
+                        <li>Automated backups</li>
+                        <li>Replication config</li>
+                        <li>Performance tuning</li>
+                        <li>Security hardening</li>
+                    </ul>
+                    <div class="role-links">
+                        <a href="#" class="role-link" style="opacity: 0.6; cursor: not-allowed;">
+                            <i class="fas fa-book"></i> Docs
+                        </a>
+                        <a href="#" class="role-link" style="opacity: 0.6; cursor: not-allowed;">
+                            <i class="fas fa-graduation-cap"></i> Guide
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="role-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <div class="role-header">
+                        <div class="role-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div>
+                            <h3>monitoring</h3>
+                            <span class="role-status" style="background: #ffc107;">🚧 Coming Soon</span>
+                        </div>
+                    </div>
+                    <p>
+                        <strong>Monitoring & Alerting</strong><br>
+                        Setup Prometheus, Grafana và alerting cho toàn bộ infrastructure.
+                    </p>
+                    <ul class="role-features">
+                        <li>Prometheus setup</li>
+                        <li>Grafana dashboards</li>
+                        <li>Alert rules</li>
+                        <li>Node exporter</li>
+                        <li>Email/Slack notifications</li>
+                    </ul>
+                    <div class="role-links">
+                        <a href="#" class="role-link" style="opacity: 0.6; cursor: not-allowed;">
+                            <i class="fas fa-book"></i> Docs
+                        </a>
+                        <a href="#" class="role-link" style="opacity: 0.6; cursor: not-allowed;">
+                            <i class="fas fa-graduation-cap"></i> Guide
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+       <section class="section install-ansible" id="install-ansible" style="background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);border-radius:12px;padding:30px 20px;margin:30px 0;box-shadow:0 4px 18px rgba(102,126,234,0.1);">
+    <h3 style="color:#667eea;font-size:2em;margin-bottom:10px;">
+        <i class="fas fa-rocket"></i> Cài đặt Ansible
+    </h3>
+    <p style="font-size:1.15em;color:#444;margin-bottom:18px;">
+        Để bắt đầu sử dụng Ansible, hãy xem hướng dẫn chi tiết tại:
+        <a href="./install.html" style="color: #f80400; font-weight: bold;" target="_blank">ĐÂY</a>
+    </p>
+    <div style="background:#1e1e1e;color:#d4d4d4;border-radius:7px;overflow-x:auto;padding:15px 20px;margin-bottom:5px;">
+        <span style="background:#667eea;color:white;padding:3px 12px;border-radius:4px;font-size:0.92em;margin-right:10px;">Ubuntu/Debian</span>
+        <code style="display:block;white-space:pre-line;line-height:1.8;font-family:Consolas,monospace;">
+sudo apt update
+sudo apt install ansible -y
+        </code>
+        <span style="background:#764ba2;color:white;padding:3px 12px;border-radius:4px;font-size:0.92em;margin-right:10px;">RHEL/AlmaLinux</span>
+        <code style="display:block;white-space:pre-line;line-height:1.8;font-family:Consolas,monospace;">
+sudo dnf install epel-release -y
+sudo dnf install ansible -y
+        </code>
+        <span style="background:#17a2b8;color:white;padding:3px 12px;border-radius:4px;font-size:0.92em;margin-right:10px;">macOS</span>
+        <code style="display:block;white-space:pre-line;line-height:1.8;font-family:Consolas,monospace;">
+brew install ansible
+        </code>
+        <span style="background:#ffc107;color:#333;padding:3px 12px;border-radius:4px;font-size:0.92em;margin-right:10px;">Kiểm tra cài đặt</span>
+        <code style="display:block;white-space:pre-line;line-height:1.8;font-family:Consolas,monospace;">
+ansible --version
+        </code>
+    </div>
+</section>
+        
+        <!-- Documentation Links -->
+        <section class="section">
+            <h2><i class="fas fa-book"></i> Documentation</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <i class="fas fa-file-alt"></i>
+                    <h3>Main README</h3>
+                    <p>Tổng quan về dự án, cấu trúc, và hướng dẫn chung</p>
+                    <a href="README.md" style="color: var(--primary); font-weight: bold;">
+                        Read More <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>OpenSCAP Guide</h3>
+                    <p>Hướng dẫn chi tiết về OpenSCAP scanning và remediation</p>
+                    <a href="openscap-guide.html" style="color: var(--primary); font-weight: bold;">
+                        View Guide <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-cubes"></i>
+                    <h3>Roles Documentation</h3>
+                    <p>Tài liệu chi tiết cho từng Ansible role</p>
+                    <a href="roles/" style="color: var(--primary); font-weight: bold;">
+                        Browse Roles <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Roadmap -->
+        <section class="section">
+            <h2><i class="fas fa-road"></i> Roadmap</h2>
+            <div style="max-width: 800px; margin: 0 auto;">
+                <div class="feature-card" style="margin-bottom: 20px;">
+                    <h3>✅ Phase 1 - Q4 2024 (Completed)</h3>
+                    <ul style="list-style: none; padding-left: 0;">
+                        <li>✓ OpenSCAP security scanning role</li>
+                        <li>✓ Auto-remediation với backup</li>
+                        <li>✓ HTML reporting</li>
+                        <li>✓ Support AlmaLinux 9</li>
+                    </ul>
+                </div>
+                
+                <div class="feature-card" style="margin-bottom: 20px;">
+                    <h3>🚧 Phase 2 - Q1 2025 (In Progress)</h3>
+                    <ul style="list-style: none; padding-left: 0;">
+                        <li>⏳ Web server management role</li>
+                        <li>⏳ Database automation role</li>
+                        <li>⏳ Monitoring setup role</li>
+                        <li>⏳ Support Ubuntu/Debian</li>
+                    </ul>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>📅 Phase 3 - Q2 2025 (Planned)</h3>
+                    <ul style="list-style: none; padding-left: 0;">
+                        <li>○ CI/CD integration</li>
+                        <li>○ Web dashboard</li>
+                        <li>○ Email notifications</li>
+                        <li>○ Multi-cloud support</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>Ansible Project</h3>
+                <p>Automation & Security Compliance Infrastructure as Code</p>
+                <div class="social-links">
+                    <a href="https://github.com/HyHonCuTe" target="_blank" title="GitHub">
+                        <i class="fab fa-github"></i>
+                    </a>
+                    <a href="https://github.com/HyHonCuTe/ansible" target="_blank" title="Project">
+                        <i class="fas fa-code-branch"></i>
+                    </a>
+                    <a href="mailto:your-email@example.com" title="Email">
+                        <i class="fas fa-envelope"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="footer-section">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="https://github.com/HyHonCuTe/ansible">GitHub Repository</a></li>
+                    <li><a href="README.md">Documentation</a></li>
+                    <li><a href="openscap-guide.html">OpenSCAP Guide</a></li>
+                    <li><a href="https://github.com/HyHonCuTe/ansible/issues">Report Issues</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h3>Roles</h3>
+                <ul>
+                    <li><a href="roles/scap_check/README.md">scap_check</a></li>
+                    <li><a href="#">web_server (Coming Soon)</a></li>
+                    <li><a href="#">database (Coming Soon)</a></li>
+                    <li><a href="#">monitoring (Coming Soon)</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h3>Resources</h3>
+                <ul>
+                    <li><a href="https://docs.ansible.com/" target="_blank">Ansible Docs</a></li>
+                    <li><a href="https://www.open-scap.org/" target="_blank">OpenSCAP</a></li>
+                    <li><a href="https://www.cisecurity.org/cis-benchmarks" target="_blank">CIS Benchmarks</a></li>
+                    <li><a href="https://public.cyber.mil/stigs/" target="_blank">DISA STIGs</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <p>&copy; 2025 HyHonCuTe - Ansible Automation Project | Last Updated: 2025-10-11 16:00:53 UTC</p>
+            <p>Made with <i class="fas fa-heart" style="color: #e74c3c;"></i> using Ansible</p>
+        </div>
+    </footer>
+    
+    <script>
+        // Copy code function
+        function copyCode(button) {
+            const codeBlock = button.parentElement;
+            const code = codeBlock.querySelector('code').textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                // Show toast
+                const toast = document.getElementById('toast');
+                toast.style.display = 'block';
+                
+                // Change button text
+                const originalText = button.textContent;
+                button.textContent = '✓ Copied!';
+                button.style.background = '#28a745';
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    button.textContent = originalText;
+                    button.style.background = '#28a745';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+        
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // Add animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.animation = 'fadeInUp 0.6s ease both';
+                }
+            });
+        }, observerOptions);
+        
+        // Observe all sections
+        document.querySelectorAll('.section, .stat-card, .feature-card, .role-card').forEach(el => {
+            observer.observe(el);
+        });
+    </script>
+</body>
+</html>

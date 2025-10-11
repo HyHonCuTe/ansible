@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hướng dẫn OpenSCAP - AlmaLinux 9</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .step {
+            background: #f8f9fa;
+            border-left: 5px solid #667eea;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 5px;
+            transition: transform 0.3s ease;
+        }
+        
+        .step:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 15px;
+        }
+        
+        .step-title {
+            font-size: 1.5em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .description {
+            background: #e3f2fd;
+            border-left: 3px solid #2196f3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .description h4 {
+            color: #1976d2;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .description ul {
+            margin-left: 20px;
+        }
+        
+        .description li {
+            margin: 5px 0;
+        }
+        
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 15px 0;
+            position: relative;
+            overflow-x: auto;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95em;
+            line-height: 1.5;
+            white-space: pre;
+            display: block;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+        
+        .copy-btn:active {
+            background: #4a5bc4;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .warning strong {
+            color: #856404;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-left: 5px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            border-left: 5px solid #17a2b8;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .profiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .profile-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            padding: 15px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .profile-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+        
+        .profile-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .profile-card code {
+            background: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            color: #d63384;
+            display: block;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        
+        .checklist {
+            background: white;
+            border: 2px solid #28a745;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .checklist h3 {
+            color: #28a745;
+            margin-bottom: 15px;
+        }
+        
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .checklist-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 5px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .command-explain {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        
+        .command-explain strong {
+            color: #667eea;
+        }
+        
+        footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .toc h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .toc ul {
+            list-style: none;
+        }
+        
+        .toc li {
+            padding: 8px 0;
+        }
+        
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .toc a:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="toast" id="toast">✅ Đã copy vào clipboard!</div>
+    
+    <div class="container">
+        <header>
+            <h1>🔐 Hướng dẫn OpenSCAP lệnh chạy CMD</h1>
+            <p>Scan và Khắc phục Bảo mật cho AlmaLinux 9</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">Cập nhật: 2025-10-11 | Tác giả: HyHonCuTe</p>
+        </header>
+        
+        <div class="content">
+            <!-- Mục lục -->
+            <div class="toc">
+                <h3>📑 Mục lục</h3>
+                <ul>
+                    <li><a href="#step1">Bước 1: Cài đặt OpenSCAP</a></li>
+                    <li><a href="#step2">Bước 2: Scan hệ thống</a></li>
+                    <li><a href="#step3">Bước 3: Xem kết quả</a></li>
+                    <li><a href="#step4">Bước 4: Backup</a></li>
+                    <li><a href="#step5">Bước 5: Khắc phục tự động</a></li>
+                    <li><a href="#step6">Bước 6: So sánh kết quả</a></li>
+                    <li><a href="#step7">Bước 7: Restore</a></li>
+                    <li><a href="#profiles">Profiles khác</a></li>
+                    <li><a href="#script">Script tự động</a></li>
+                    <li><a href="#command">Chạy bằng Ansible</a></li>
+                </ul>
+            </div>
+            
+            <!-- Giới thiệu -->
+            <div class="info">
+                <h4>📖 Giới thiệu về OpenSCAP</h4>
+                <p><strong>OpenSCAP</strong> là framework mã nguồn mở để kiểm tra bảo mật và tuân thủ tiêu chuẩn (compliance) trên Linux.</p>
+                <ul>
+                    <li><strong>SCAP</strong> = Security Content Automation Protocol</li>
+                    <li><strong>XCCDF</strong> = Extensible Configuration Checklist Description Format</li>
+                    <li><strong>OVAL</strong> = Open Vulnerability and Assessment Language</li>
+                    <li><strong>Profile</strong> = Tập hợp các rules bảo mật (VD: CIS, STIG, PCI-DSS)</li>
+                </ul>
+            </div>
+            
+            <!-- Bước 1 -->
+            <div class="step" id="step1">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Cài đặt OpenSCAP</div>
+                </div>
+                
+                <div class="description">
+                    <h4>📦 Mô tả</h4>
+                    <p>Cài đặt 2 gói cần thiết:</p>
+                    <ul>
+                        <li><strong>openscap-scanner</strong>: Công cụ chính để scan và fix</li>
+                        <li><strong>scap-security-guide</strong>: Chứa các profile bảo mật (CIS, STIG, PCI-DSS...)</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>sudo dnf install -y openscap-scanner scap-security-guide</code><pre>
+                </div>
+                
+                <div class="command-explain">
+                    <strong>Giải thích:</strong><br>
+                    • <pre><code>dnf</code><pre>: Package manager của RHEL/AlmaLinux<br>
+                    • <pre><code>-y</code><pre>: Tự động xác nhận cài đặt (không hỏi yes/no)<br>
+                    • Thời gian: ~2-5 phút
+                </div>
+            </div>
+            
+            <!-- Bước 2 -->
+            <div class="step" id="step2">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Scan Hệ thống</div>
+                </div>
+                
+                <div class="description">
+                    <h4>🔍 Mô tả</h4>
+                    <p>Quét hệ thống với profile <strong>CIS Level 1 Server</strong> - Tiêu chuẩn bảo mật phổ biến nhất.</p>
+                    <ul>
+                        <li>Kiểm tra <strong>266 rules</strong> bảo mật</li>
+                        <li>Thời gian: <strong>3-5 phút</strong></li>
+                        <li>Tạo 2 files: XML (kết quả chi tiết) và HTML (báo cáo dễ đọc)</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Tạo thư mục lưu kết quả
+sudo mkdir -p /var/tmp/scap
+
+# Chạy scan
+sudo oscap xccdf eval \
+  --fetch-remote-resources \
+  --profile xccdf_org.ssgproject.content_profile_cis_server_l1 \
+  --results /var/tmp/scap/scan-results.xml \
+  --report /var/tmp/scap/scan-report.html \
+  /usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml</code><pre>
+                </div>
+                
+                <div class="command-explain">
+                    <strong>Giải thích từng tham số:</strong><br>
+                    • <pre><code>oscap xccdf eval</code><pre>: Lệnh chính để chạy scan<br>
+                    • <pre><code>--fetch-remote-resources</code><pre>: Tự động download OVAL definitions từ internet<br>
+                    • <pre><code>--profile</code><pre>: Chọn profile CIS Level 1 Server<br>
+                    • <pre><code>--results</code><pre>: File XML chứa kết quả chi tiết (dùng để generate fix)<br>
+                    • <pre><code>--report</code><pre>: File HTML báo cáo (mở bằng browser)<br>
+                    • <pre><code>/usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml</code><pre>: File SCAP datastream
+                </div>
+                
+                <div class="warning">
+                    <strong>⚠️ Lưu ý</strong>
+                    <ul>
+                        <li>Lệnh này <strong>CHỈ SCAN</strong>, không thay đổi gì</li>
+                        <li>Exit code = 0: Pass hoàn toàn</li>
+                        <li>Exit code = 2: Có findings (bình thường)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Bước 3 -->
+            <div class="step" id="step3">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Xem Kết quả</div>
+                </div>
+                
+                <div class="description">
+                    <h4>📊 Mô tả</h4>
+                    <p>Phân tích file XML để đếm số lỗi PASS và FAIL</p>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Đếm số lỗi
+FAIL=$(sed -n 's/.*&lt;result&gt;\([^&lt;]*\)&lt;\/result&gt;.*/\1/p' /var/tmp/scap/scan-results.xml | grep -c "^fail$")
+PASS=$(sed -n 's/.*&lt;result&gt;\([^&lt;]*\)&lt;\/result&gt;.*/\1/p' /var/tmp/scap/scan-results.xml | grep -c "^pass$")
+
+echo "❌ Failed: $FAIL"
+echo "✅ Passed: $PASS"</code><pre>
+                </div>
+                
+                <div class="command-explain">
+                    <strong>Giải thích:</strong><br>
+                    • <pre><code>sed -n</code><pre>: Stream editor để parse XML<br>
+                    • <pre><code>&lt;result&gt;...&lt;/result&gt;</code><pre>: Trích xuất giá trị kết quả<br>
+                    • <pre><code>grep -c "^fail$"</code><pre>: Đếm số dòng chứa "fail"
+                </div>
+                
+                <div class="info">
+                    <strong>💡 Xem báo cáo HTML đẹp hơn:</strong><br>
+                    Copy file về máy local và mở bằng browser:
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        <pre><code>scp suricata@192.168.1.248:/var/tmp/scap/scan-report.html ~/Desktop/</code><pre>
+                    </div>
+                    (Thay <pre><code>suricata@192.168.1.248</code><pre> bằng user@IP của bạn)
+                </div>
+            </div>
+            
+            <!-- Bước 4 -->
+            <div class="step" id="step4">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Backup (BẮT BUỘC!)</div>
+                </div>
+                
+                <div class="warning">
+                    <strong>🚨 QUAN TRỌNG NHẤT!</strong>
+                    <p>LUÔN LUÔN backup trước khi chạy remediation! Một số fix có thể:</p>
+                    <ul>
+                        <li>❌ Lock SSH (không login được)</li>
+                        <li>❌ Break services</li>
+                        <li>❌ Thay đổi file hệ thống</li>
+                    </ul>
+                </div>
+                
+                <div class="description">
+                    <h4>💾 Mô tả</h4>
+                    <p>Backup các file cấu hình quan trọng vào file .tar.gz</p>
+                    <ul>
+                        <li><strong>/etc/ssh/</strong>: Cấu hình SSH</li>
+                        <li><strong>/etc/pam.d/</strong>: Cấu hình xác thực PAM</li>
+                        <li><strong>/etc/security/</strong>: Chính sách bảo mật</li>
+                        <li><strong>/etc/sudoers</strong>: Quyền sudo</li>
+                        <li><strong>/etc/sysctl.conf</strong>: Kernel parameters</li>
+                        <li><strong>/etc/fstab</strong>: File systems</li>
+                        <li><strong>/etc/audit/</strong>: Audit logs</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>sudo tar -czf ~/backup_$(date +%Y%m%d_%H%M%S).tar.gz \
+  /etc/ssh/ /etc/pam.d/ /etc/security/ /etc/login.defs \
+  /etc/sudoers /etc/sysctl.conf /etc/fstab /etc/audit/ \
+  2>/dev/null
+
+sudo chown $USER:$USER ~/backup_*.tar.gz
+ls -lh ~/backup_*.tar.gz | tail -1</code><pre>
+                </div>
+                
+                <div class="command-explain">
+                    <strong>Giải thích:</strong><br>
+                    • <pre><code>tar -czf</code><pre>: Tạo file nén (.tar.gz)<br>
+                    • <pre><code>$(date +%Y%m%d_%H%M%S)</code><pre>: Timestamp (VD: 20251011_153829)<br>
+                    • <pre><code>2>/dev/null</code><pre>: Ẩn lỗi nếu file không tồn tại<br>
+                    • <pre><code>chown $USER:$USER</code><pre>: Đổi owner về user hiện tại<br>
+                    • File backup lưu ở: <pre><code>~/backup_YYYYMMDD_HHMMSS.tar.gz</code><pre>
+                </div>
+                
+                <div class="success">
+                    <strong>✅ Kiểm tra backup thành công:</strong><br>
+                    File có dung lượng > 1MB là OK
+                </div>
+            </div>
+            
+            <!-- Bước 5 -->
+            <div class="step" id="step5">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <div class="step-title">Khắc phục Tự động</div>
+                </div>
+                
+                <div class="warning">
+                    <strong>⚠️⚠️⚠️ CẢNH BÁO NGHIÊM TRỌNG ⚠️⚠️⚠️</strong>
+                    <p>Lệnh này sẽ <strong>THAY ĐỔI TRỰC TIẾP</strong> hệ thống!</p>
+                    <ul>
+                        <li>🔴 Có thể lock SSH</li>
+                        <li>🔴 Có thể yêu cầu reboot</li>
+                        <li>🔴 Không có undo</li>
+                    </ul>
+                    <p><strong>CHỈ CHẠY NẾU:</strong></p>
+                    <ul>
+                        <li>✅ Đã backup</li>
+                        <li>✅ Có console access (hoặc đã snapshot VM)</li>
+                        <li>✅ Đọc kỹ scan report trước</li>
+                    </ul>
+                </div>
+                
+                <div class="description">
+                    <h4>🔧 Mô tả</h4>
+                    <p>Sử dụng tham số <pre><code>--remediate</code><pre> để tự động fix TẤT CẢ lỗi đã phát hiện</p>
+                    <ul>
+                        <li>Thời gian: <strong>5-10 phút</strong></li>
+                        <li>Tự động sửa: cấu hình SSH, PAM, sysctl, file permissions, audit rules...</li>
+                        <li>Tạo report sau khi fix</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>sudo oscap xccdf eval \
+  --remediate \
+  --fetch-remote-resources \
+  --profile xccdf_org.ssgproject.content_profile_cis_server_l1 \
+  --results /var/tmp/scap/after-fix.xml \
+  --report /var/tmp/scap/after-fix.html \
+  /usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml \
+  2>&1 | tee /tmp/fix.log</code><pre>
+                </div>
+                
+                <div class="command-explain">
+                    <strong>Giải thích tham số mới:</strong><br>
+                    • <pre><code>--remediate</code><pre>: <strong>KEY PARAMETER</strong> - Bật chế độ tự động fix<br>
+                    • <pre><code>2>&1</code><pre>: Redirect stderr sang stdout<br>
+                    • <pre><code>| tee /tmp/fix.log</code><pre>: Vừa hiển thị vừa lưu log
+                </div>
+                
+                <div class="info">
+                    <strong>💡 Trong lúc chạy:</strong><br>
+                    • Sẽ thấy nhiều dòng "Remediating..." trên màn hình<br>
+                    • Một số service có thể restart tự động<br>
+                    • MỞ TERMINAL MỚI và test SSH ngay sau khi xong!
+                </div>
+            </div>
+            
+            <!-- Bước 6 -->
+            <div class="step" id="step6">
+                <div class="step-header">
+                    <div class="step-number">6</div>
+                    <div class="step-title">So sánh Kết quả</div>
+                </div>
+                
+                <div class="description">
+                    <h4>📊 Mô tả</h4>
+                    <p>So sánh số lỗi TRƯỚC và SAU khi fix để đánh giá hiệu quả</p>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>BEFORE=$(sed -n 's/.*&lt;result&gt;\([^&lt;]*\)&lt;\/result&gt;.*/\1/p' /var/tmp/scap/scan-results.xml | grep -c "^fail$")
+AFTER=$(sed -n 's/.*&lt;result&gt;\([^&lt;]*\)&lt;\/result&gt;.*/\1/p' /var/tmp/scap/after-fix.xml | grep -c "^fail$")
+FIXED=$((BEFORE - AFTER))
+
+echo "📊 ===== KẾT QUẢ ====="
+echo "Trước: $BEFORE lỗi"
+echo "Sau:   $AFTER lỗi"
+echo "Đã fix: $FIXED lỗi ($(echo "scale=1; ($FIXED*100)/$BEFORE" | bc)%)"</code><pre>
+                </div>
+                
+                <div class="success">
+                    <strong>✅ Kết quả tốt:</strong><br>
+                    • Fix được > 70%: Tuyệt vời!<br>
+                    • Fix được 50-70%: Tốt (một số lỗi cần fix thủ công)<br>
+                    • Fix được < 30%: Cần kiểm tra lại
+                </div>
+
+                ">
+                
+                <div class="info">
+                    <strong>💡 Một số lỗi KHÔNG THỂ tự động fix:</strong><br>
+                    • Partition riêng cho /tmp, /var (cần repartition disk)<br>
+                    • Install firewall (nếu chưa cài)<br>
+                    • SELinux enable (cần reboot)<br>
+                    • Một số config đặc thù môi trường
+                </div>
+            </div>
+            
+            <!-- Bước 7 -->
+            <div class="step" id="step7">
+                <div class="step-header">
+                    <div class="step-number">7</div>
+                    <div class="step-title">Restore (Nếu có vấn đề)</div>
+                </div>
+                
+                <div class="warning">
+                    <strong>🔙 Khi nào cần restore?</strong>
+                    <ul>
+                        <li>❌ Không SSH được</li>
+                        <li>❌ Services không chạy</li>
+                        <li>❌ Hệ thống lỗi</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code># Restore tất cả từ backup
+sudo tar -xzf ~/backup_*.tar.gz -C /
+
+# Restart services
+sudo systemctl restart sshd
+sudo systemctl restart auditd
+
+# Reboot nếu cần
+sudo reboot</code><pre>
+                </div>
+                
+                <div class="command-explain">
+                    <strong>Giải thích:</strong><br>
+                    • <pre><code>tar -xzf</code><pre>: Extract file nén<br>
+                    • <pre><code>-C /</code><pre>: Giải nén vào root directory (ghi đè file cũ)<br>
+                    • <pre><code>systemctl restart</code><pre>: Restart services để apply config cũ
+                </div>
+            </div>
+            
+            <!-- Profiles -->
+            <div class="step" id="profiles">
+                <div class="step-header">
+                    <div class="step-number">📋</div>
+                    <div class="step-title">Các Profile Khác</div>
+                </div>
+                
+                <div class="description">
+                    <h4>🎯 Chọn Profile phù hợp với nhu cầu</h4>
+                    <p>Thay thế giá trị <pre><code>--profile</code><pre> trong lệnh scan/fix</p>
+                </div>
+                
+                <div class="profiles">
+                    <div class="profile-card">
+                        <h4>🥇 CIS Level 1 Server</h4>
+                        <p><strong>Khuyến nghị cho hầu hết</strong></p>
+                        <p>Độ nghiêm: ⭐⭐ Vừa phải</p>
+                        <pre><code>xccdf_org.ssgproject.content_profile_cis_server_l1</code><pre>
+                    </div>
+                    
+                    <div class="profile-card">
+                        <h4>🥈 CIS Level 2 Server</h4>
+                        <p>Môi trường bảo mật cao</p>
+                        <p>Độ nghiêm: ⭐⭐⭐ Nghiêm ngặt</p>
+                        <pre><code>xccdf_org.ssgproject.content_profile_cis</code><pre>
+                    </div>
+                    
+                    <div class="profile-card">
+                        <h4>🏛️ DISA STIG</h4>
+                        <p>Chính phủ / Military</p>
+                        <p>Độ nghiêm: ⭐⭐⭐⭐ Rất nghiêm</p>
+                        <pre><code>xccdf_org.ssgproject.content_profile_stig</code><pre>
+                    </div>
+                    
+                    <div class="profile-card">
+                        <h4>💳 PCI-DSS v4.0</h4>
+                        <p>Payment systems</p>
+                        <p>Độ nghiêm: ⭐⭐⭐ Nghiêm ngặt</p>
+                        <pre><code>xccdf_org.ssgproject.content_profile_pci-dss</code><pre>
+                    </div>
+                    
+                    <div class="profile-card">
+                        <h4>🏥 HIPAA</h4>
+                        <p>Healthcare systems</p>
+                        <p>Độ nghiêm: ⭐⭐⭐ Nghiêm ngặt</p>
+                        <pre><code>xccdf_org.ssgproject.content_profile_hipaa</code><pre>
+                    </div>
+                    
+                    <div class="profile-card">
+                        <h4>🔒 OSPP</h4>
+                        <p>Common Criteria</p>
+                        <p>Độ nghiêm: ⭐⭐ Vừa phải</p>
+                        <pre><code>xccdf_org.ssgproject.content_profile_ospp</code><pre>
+                    </div>
+                </div>
+                
+                <div class="info">
+                    <strong>💡 Ví dụ sử dụng profile khác:</strong>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        <pre><code># Scan với DISA STIG
+sudo oscap xccdf eval \
+  --fetch-remote-resources \
+  --profile xccdf_org.ssgproject.content_profile_stig \
+  --results /var/tmp/scap/stig-results.xml \
+  --report /var/tmp/scap/stig-report.html \
+  /usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml</code><pre>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Hướng dẫn cài roles chạy ansible cho openscap -->
+            <div class="step" id="command">
+                <div class="step-header">
+                    <div class="step-number">⚙️</div>
+                    <div class="step-title">Chạy bằng Ansible</div>
+                </div>
+                <div class="description">
+                    <h4>⚡ Mô tả</h4>
+                    <p>Sử dụng Ansible để tự động hóa việc cài đặt và chạy OpenSCAP trên nhiều máy chủ.</p>
+                    <ul>
+                        <li>✅ Cài đặt OpenSCAP và scap-security-guide</li>
+                        <li>✅ Scan hệ thống với profile CIS Level 1 Server</li>
+                        <li>✅ Tự động khắc phục lỗi bảo mật (optional)</li>
+                        <li>✅ Tạo báo cáo HTML trước/sau và backup</li>
+                    </ul>
+                </div>
+                
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">📋 Bước 1: Clone repository</h4>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>git clone https://github.com/HyHonCuTe/ansible.git
+            cd ansible</code></pre>
+                </div>
+                
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">🖥️ Bước 2: Cấu hình inventory</h4>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > inventory/hosts << 'EOF'
+            [linux_servers]
+            server1 ansible_host=192.168.1.10 ansible_user=admin
+            server2 ansible_host=192.168.1.20 ansible_user=admin
+            EOF</code></pre>
+                </div>
+                
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">🚀 Bước 3: Chạy scan (chỉ kiểm tra)</h4>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code>ansible-playbook playbooks/scap_check.yml</code>
+                </div>
+                
+                <h4 style="margin-top: 20px; margin-bottom: 10px;">🔧 Bước 4: Chạy scan và auto-fix</h4>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code>ansible-playbook playbooks/scap_check.yml -e "auto_remediate=true"</code>
+                </div>
+                
+                <div style="background: #d1ecf1; padding: 15px; border-radius: 8px; margin-top: 20px; border-left: 4px solid #0c5460;">
+                    <strong>💡 Kết quả:</strong>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>📄 HTML reports: <code>roles/scap_check/results/</code></li>
+                        <li>💾 Backups: <code>roles/scap_check/backup/</code></li>
+                        <li>📊 Thống kê chi tiết hiển thị trên terminal</li>
+                    </ul>
+                </div>
+                
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #856404;">
+                    <strong>⚠️ Lưu ý:</strong> Đọc hướng dẫn chi tiết cài ansible và roles tại:
+                    <a href="install.html" style="color: #667eea; font-weight: bold;" target="_blank">
+                        Cài đặt Ansible và Roles
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Script tự động -->
+            <div class="step" id="script">
+                <div class="step-header">
+                    <div class="step-number">🚀</div>
+                    <div class="step-title">Script Tự Động Hoàn Chỉnh</div>
+                </div>
+                
+                <div class="description">
+                    <h4>⚡ Mô tả</h4>
+                    <p>Script tự động thực hiện TẤT CẢ các bước từ 1-6 trong 1 lệnh duy nhất</p>
+                    <ul>
+                        <li>✅ Tự động cài đặt</li>
+                        <li>✅ Scan trước</li>
+                        <li>✅ Backup tự động</li>
+                        <li>✅ Hỏi xác nhận trước khi fix</li>
+                        <li>✅ Fix và scan lại</li>
+                        <li>✅ So sánh kết quả</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>cat > /tmp/scap_fix.sh << 'EOF'
+#!/bin/bash
+echo "🚀 OSCAP Auto-Fix Script"
+PROFILE="xccdf_org.ssgproject.content_profile_cis_server_l1"
+SCAP="/usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml"
+
+# 1. Install
+echo "📦 [1/6] Installing OpenSCAP..."
+sudo dnf install -y openscap-scanner scap-security-guide
+
+# 2. Scan
+echo "🔍 [2/6] Scanning system..."
+sudo mkdir -p /var/tmp/scap
+sudo oscap xccdf eval --fetch-remote-resources --profile $PROFILE \
+  --results /var/tmp/scap/before.xml --report /var/tmp/scap/before.html $SCAP || true
+
+BEFORE=$(sed -n 's/.*<result>\([^<]*\)<\/result>.*/\1/p' /var/tmp/scap/before.xml | grep -c "^fail$")
+echo "   ❌ Current failures: $BEFORE"
+
+# 3. Backup
+echo "💾 [3/6] Creating backup..."
+BACKUP=~/backup_$(date +%Y%m%d_%H%M%S).tar.gz
+sudo tar -czf "$BACKUP" /etc/ssh/ /etc/pam.d/ /etc/security/ /etc/sudoers /etc/sysctl.conf /etc/fstab 2>/dev/null
+sudo chown $USER:$USER "$BACKUP"
+echo "   ✅ Backup: $BACKUP"
+
+# 4. Confirm
+echo ""
+read -p "⚠️  Fix $BEFORE errors? (yes/NO): " CONFIRM
+[ "$CONFIRM" != "yes" ] && exit 0
+
+# 5. Fix
+echo "🔧 [4/6] Running auto-remediation..."
+sudo oscap xccdf eval --remediate --fetch-remote-resources --profile $PROFILE \
+  --results /var/tmp/scap/after.xml --report /var/tmp/scap/after.html $SCAP 2>&1 | tee /tmp/fix.log
+
+# 6. Compare
+echo "📊 [5/6] Analyzing results..."
+AFTER=$(sed -n 's/.*<result>\([^<]*\)<\/result>.*/\1/p' /var/tmp/scap/after.xml | grep -c "^fail$")
+FIXED=$((BEFORE - AFTER))
+PERCENT=$(echo "scale=1;($FIXED*100)/$BEFORE"|bc)
+
+echo ""
+echo "📊 ===== FINAL RESULTS ====="
+echo "Before: $BEFORE errors"
+echo "After:  $AFTER errors"
+echo "Fixed:  $FIXED errors ($PERCENT%)"
+echo ""
+echo "📄 Reports:"
+echo "   - Before: /var/tmp/scap/before.html"
+echo "   - After:  /var/tmp/scap/after.html"
+echo "   - Log:    /tmp/fix.log"
+echo "💾 Backup: $BACKUP"
+echo ""
+echo "🔙 To restore: sudo tar -xzf $BACKUP -C /"
+EOF
+
+chmod +x /tmp/scap_fix.sh && /tmp/scap_fix.sh</code><pre>
+                </div>
+                
+                <div class="success">
+                    <strong>✅ Chạy script:</strong><br>
+                    Chỉ cần copy toàn bộ đoạn code trên và paste vào terminal, script sẽ tự chạy!
+                </div>
+            </div>
+            
+            <!-- Checklist -->
+            <div class="checklist">
+                <h3>✅ Checklist Trước Khi Fix</h3>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check1">
+                    <label for="check1">Đã cài đặt OpenSCAP và scap-security-guide</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check2">
+                    <label for="check2">Đã scan và có file scan-results.xml</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check3">
+                    <label for="check3">Đã đọc scan report và hiểu những gì sẽ bị thay đổi</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check4">
+                    <label for="check4">Đã tạo backup và verify kích thước > 1MB</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check5">
+                    <label for="check5">Có console access hoặc đã snapshot VM</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check6">
+                    <label for="check6">Đã test trên staging/dev trước (nếu là production)</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check7">
+                    <label for="check7">Sẵn sàng test SSH ngay sau khi fix</label>
+                </div>
+            </div>
+            
+            <!-- Tips -->
+            <div class="info">
+                <h4>💡 Tips và Best Practices</h4>
+                <ul>
+                    <li><strong>Test trên staging trước:</strong> Đừng bao giờ chạy remediation lần đầu trên production</li>
+                    <li><strong>Có kế hoạch rollback:</strong> Luôn có backup và biết cách restore</li>
+                    <li><strong>Chạy ngoài giờ cao điểm:</strong> Một số service có thể restart</li>
+                    <li><strong>Đọc scan report kỹ:</strong> Hiểu những gì sẽ thay đổi</li>
+                    <li><strong>Monitor sau khi fix:</strong> Kiểm tra logs, services, SSH</li>
+                    <li><strong>Document:</strong> Ghi lại những gì đã fix và kết quả</li>
+                </ul>
+            </div>
+            
+            <!-- Troubleshooting -->
+            <div class="warning">
+                <strong>🔧 Troubleshooting Thường Gặp</strong>
+                <ul>
+                    <li><strong>SSH bị lock:</strong> Login qua console, restore backup SSH: <pre><code>sudo tar -xzf ~/backup_*.tar.gz /etc/ssh/ -C /</code><pre></li>
+                    <li><strong>Services không start:</strong> Kiểm tra log: <pre><code>journalctl -xe</code><pre></li>
+                    <li><strong>Fix 0%:</strong> Một số lỗi cần fix thủ công hoặc cần reboot</li>
+                    <li><strong>Compliance vẫn thấp:</strong> Một số rules không thể tự động (VD: partition riêng)</li>
+                </ul>
+            </div>
+        </div>
+        
+        <footer>
+            <p>&copy; 2025 OpenSCAP Guide | AlmaLinux 9 | CIS Benchmark</p>
+            <p>Tạo bởi: HyHonCuTe | Cập nhật: 2025-10-11 15:38:29 UTC</p>
+        </footer>
+    </div>
+    
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.nextElementSibling;
+            const code = codeBlock.textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                // Show toast
+                const toast = document.getElementById('toast');
+                toast.style.display = 'block';
+                
+                // Change button text
+                const originalText = button.textContent;
+                button.textContent = '✓ Copied!';
+                button.style.background = '#28a745';
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    button.textContent = originalText;
+                    button.style.background = '#667eea';
+                }, 2000);
+            }).catch(err => {
+                alert('Lỗi copy: ' + err);
+            });
+        }
+        
+        // Smooth scroll for TOC links
+        document.querySelectorAll('.toc a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            });
+        });
+        
+        // Save checklist state to localStorage
+        document.querySelectorAll('.checklist-item input').forEach(checkbox => {
+            const id = checkbox.id;
+            checkbox.checked = localStorage.getItem(id) === 'true';
+            
+            checkbox.addEventListener('change', () => {
+                localStorage.setItem(id, checkbox.checked);
+            });
+        });
+    </script>
+</body>
+</html>
