@@ -1,0 +1,110 @@
+---
+- name: Wait for GVMD container to be ready
+  command: docker exec {{ openvas_container_prefix }}-gvmd gvmd --version
+  register: gvmd_check
+  until: gvmd_check.rc == 0
+  retries: 30
+  delay: 10
+  ignore_errors: yes
+
+- name: Check if admin user exists
+  command: >
+    docker exec {{ openvas_container_prefix }}-gvmd
+    gvmd --get-users
+  register: existing_users
+  changed_when: false
+  failed_when: false
+
+- name: Display existing users
+  debug:
+    msg: "{{ existing_users.stdout_lines }}"
+  when: existing_users.stdout != ""
+
+- name: Create admin user if not exists
+  command: >
+    docker exec {{ openvas_container_prefix }}-gvmd
+    gvmd --create-user={{ openvas_admin_user }}
+    --password={{ openvas_admin_password }}
+  when: openvas_admin_user not in existing_users.stdout
+  no_log: true
+  ignore_errors: yes
+
+- name: Install gvm-tools for scanning
+  pip:
+    name:
+      - gvm-tools
+      - python-gvm
+    executable: pip3
+    state: present
+  become: yes
+
+- name: Copy report parser
+  copy:
+    src: openvas-parser.py
+    dest: /usr/local/bin/openvas-parser.py
+    mode: '0755'
+    owner: root
+    group: root
+  become: yes
+
+- name: Create scan script for Docker
+  template:
+    src: scan-script-docker.sh.j2
+    dest: /usr/local/bin/openvas-scan.sh
+    mode: '0755'
+    owner: root
+    group: root
+  become: yes
+
+- name: Create feed update script
+  copy:
+    content: |
+      #!/bin/bash
+      # OpenVAS Feed Update Script
+      echo "[$(date)] Starting OpenVAS feed update..."
+      docker exec {{ openvas_container_prefix }}-gvmd greenbone-feed-sync
+      echo "[$(date)] Feed update completed"
+    dest: /usr/local/bin/openvas-feed-update.sh
+    mode: '0755'
+    owner: root
+    group: root
+  become: yes
+
+- name: Create feed update cron job
+  cron:
+    name: "OpenVAS feed update"
+    minute: "{{ openvas_feed_update_minute }}"
+    hour: "{{ openvas_feed_update_hour }}"
+    job: "/usr/local/bin/openvas-feed-update.sh >> {{ openvas_log_dir }}/feed-update.log 2>&1"
+    user: root
+  become: yes
+  when: openvas_auto_update_feeds
+
+- name: Create scheduled scan cron job
+  cron:
+    name: "OpenVAS scheduled scan"
+    minute: "{{ openvas_scan_schedule_minute }}"
+    hour: "{{ openvas_scan_schedule_hour }}"
+    job: "/usr/local/bin/openvas-scan.sh >> {{ openvas_log_dir }}/scheduled-scan.log 2>&1"
+    user: root
+  become: yes
+  when: openvas_enable_scheduled_scan
+
+- name: Create cleanup cron job
+  cron:
+    name: "OpenVAS report cleanup"
+    minute: "0"
+    hour: "4"
+    job: "find {{ openvas_report_xml_dir }} -name '*.xml' -mtime +{{ openvas_keep_reports_days }} -exec mv {} {{ openvas_report_archive_dir }}/ \\;"
+    user: "{{ ansible_env.USER }}"
+  become: yes
+
+- name: Configuration summary
+  debug:
+    msg:
+      - "OpenVAS Docker configuration completed"
+      - "Admin user: {{ openvas_admin_user }}"
+      - "Web interface: http://localhost:{{ openvas_web_port }}"
+      - "Containers: docker ps | grep {{ openvas_container_prefix }}"
+      - "Scheduled scan: {{ 'Enabled' if openvas_enable_scheduled_scan else 'Disabled' }}"
+      - "Feed auto-update: {{ 'Enabled' if openvas_auto_update_feeds else 'Disabled' }}"

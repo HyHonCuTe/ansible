@@ -1,0 +1,35 @@
+---
+- name: restart gvmd
+  systemd:
+    name: gvmd
+    state: restarted
+  become: yes
+
+- name: restart ospd-openvas
+  systemd:
+    name: ospd-openvas
+    state: restarted
+  become: yes
+
+- name: restart gsad
+  systemd:
+    name: gsad
+    state: restarted
+  become: yes
+
+- name: restart postgresql
+  systemd:
+    name: postgresql
+    state: restarted
+  become: yes
+
+- name: restart redis
+  systemd:
+    name: "{{ 'redis' if ansible_os_family == 'RedHat' else 'redis-server' }}"
+    state: restarted
+  become: yes
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  become: yes

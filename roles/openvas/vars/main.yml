@@ -1,0 +1,35 @@
+
+# OpenVAS Configuration
+openvas_version: "22.4"
+openvas_admin_user: "admin"
+openvas_admin_password: "YourSecurePassword123!"
+
+# Scan Configuration
+openvas_scan_config: "Full and fast"
+openvas_port_list: "All IANA assigned TCP"
+
+# Report Storage
+openvas_report_dir: "/var/lib/openvas/reports"
+openvas_local_report_dir: "./reports/openvas"
+
+# Controller Node
+controller_host: "192.168.1.10"
+controller_user: "{{ lookup('env', 'USER') }}"
+controller_report_path: "/home/{{ controller_user }}/ansible-reports/openvas"
+
+# Notification
+enable_email_notification: false
+notification_email: "vodaohuyhoang@gmail.com"
+
+# OS-specific variables
+openvas_service_name: "{% if ansible_os_family == 'RedHat' %}gvmd{% else %}gvmd{% endif %}"
+openvas_scanner_service: "{% if ansible_os_family == 'RedHat' %}ospd-openvas{% else %}ospd-openvas{% endif %}"
+
+# Paths
+openvas_config_dir: "/etc/gvm"
+openvas_lib_dir: "/var/lib/gvm"
+openvas_log_dir: "/var/log/gvm"
+openvas_run_dir: "/run/gvm"
+
+# Python GVM library
+gvm_python_lib: "python-gvm"

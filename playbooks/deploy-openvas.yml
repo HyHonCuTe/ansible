@@ -1,0 +1,374 @@
+---
+- name: Deploy OpenVAS Docker on CentOS Controller
+  hosts: localhost
+  connection: local
+  
+  vars_prompt:
+    - name: confirm_install
+      prompt: "Install OpenVAS using Docker? (yes/no)"
+      private: no
+      default: "yes"
+  
+  pre_tasks:
+    - name: Check confirmation
+      fail:
+        msg: "Installation cancelled"
+      when: confirm_install | lower != "yes"
+    
+    - name: Display system info
+      debug:
+        msg:
+          - "╔════════════════════════════════════════╗"
+          - "║       OpenVAS Deployment Info          ║"
+          - "╚════════════════════════════════════════╝"
+          - ""
+          - "📅 Date: {{ ansible_date_time.iso8601 }}"
+          - "👤 User: {{ ansible_env.USER }}"
+          - "🏠 Home: {{ ansible_env.HOME }}"
+          - "💻 Hostname: {{ ansible_hostname }}"
+          - "🐧 OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "🐍 Python: {{ ansible_python_version }}"
+          - "📁 Working dir: {{ playbook_dir }}"
+          - ""
+    
+    - name: Verify current user
+      command: whoami
+      register: current_user
+      changed_when: false
+    
+    - name: Display current user
+      debug:
+        msg: "Running as: {{ current_user.stdout }}"
+  
+  roles:
+    - role: openvas
+      tags: openvas
+  
+  post_tasks:
+    - name: Create global helper script
+      copy:
+        content: |
+          #!/bin/bash
+          # OpenVAS Helper Script
+          # Created: 2025-10-18 16:48:06 UTC
+          # User: server_ansible
+          
+          INSTALL_DIR="{{ openvas_install_dir }}"
+          REPORT_DIR="{{ role_path }}/reports"
+          CONTAINER_PREFIX="{{ openvas_container_prefix }}"
+          CURRENT_USER="{{ ansible_env.USER }}"
+          
+          # Auto-detect Docker Compose
+          if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+              COMPOSE="docker compose"
+          elif command -v docker-compose &> /dev/null; then
+              COMPOSE="docker-compose"
+          else
+              echo "❌ Docker Compose not found!"
+              exit 1
+          fi
+          
+          case "$1" in
+            status)
+              echo "╔═══════════════════════════════════════╗"
+              echo "║   OpenVAS Container Status            ║"
+              echo "╚═══════════════════════════════════════╝"
+              docker ps --filter "name=$CONTAINER_PREFIX" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+              ;;
+            
+            logs)
+              SERVICE="${2:-gvmd}"
+              echo "═══ Logs for ${CONTAINER_PREFIX}-${SERVICE} ═══"
+              docker logs --tail 100 -f "${CONTAINER_PREFIX}-${SERVICE}"
+              ;;
+            
+            start)
+              echo "🚀 Starting OpenVAS containers..."
+              cd "$INSTALL_DIR" && $COMPOSE up -d
+              echo "✓ Started. Check status: openvas-helper status"
+              ;;
+            
+            stop)
+              echo "🛑 Stopping OpenVAS containers..."
+              cd "$INSTALL_DIR" && $COMPOSE down
+              echo "✓ Stopped"
+              ;;
+            
+            restart)
+              echo "🔄 Restarting OpenVAS..."
+              cd "$INSTALL_DIR" && $COMPOSE restart
+              echo "✓ Restarted"
+              ;;
+            
+            web)
+              URL="http://localhost:{{ openvas_web_port }}"
+              echo "🌐 Opening $URL"
+              firefox "$URL" 2>/dev/null || google-chrome "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || echo "Please open: $URL"
+              ;;
+            
+            reports)
+              echo "╔═══════════════════════════════════════╗"
+              echo "║       OpenVAS Reports                 ║"
+              echo "╚═══════════════════════════════════════╝"
+              echo ""
+              echo "📁 Location: $REPORT_DIR"
+              echo ""
+              echo "📄 XML Reports:"
+              if [ -d "$REPORT_DIR/xml" ]; then
+                  COUNT=$(ls -1 "$REPORT_DIR/xml/"*.xml 2>/dev/null | wc -l)
+                  echo "   Total: $COUNT files"
+                  ls -lht "$REPORT_DIR/xml/"*.xml 2>/dev/null | head -5
+              else
+                  echo "   No reports yet"
+              fi
+              echo ""
+              echo "📊 Summaries:"
+              if [ -d "$REPORT_DIR/summaries" ]; then
+                  ls -lht "$REPORT_DIR/summaries/"*.txt 2>/dev/null | head -5
+              else
+                  echo "   No summaries yet"
+              fi
+              echo ""
+              LATEST=$(ls -t "$REPORT_DIR/summaries/summary-"*.txt 2>/dev/null | head -1)
+              if [ -n "$LATEST" ]; then
+                  echo "═══ Latest Summary ═══"
+                  cat "$LATEST"
+              fi
+              ;;
+            
+            open-reports)
+              if [ -d "$REPORT_DIR" ]; then
+                  xdg-open "$REPORT_DIR" 2>/dev/null || nautilus "$REPORT_DIR" 2>/dev/null || echo "Reports at: $REPORT_DIR"
+              else
+                  echo "❌ Reports directory not found: $REPORT_DIR"
+              fi
+              ;;
+            
+            exec)
+              SERVICE="${2:-gvmd}"
+              echo "🔧 Accessing ${CONTAINER_PREFIX}-${SERVICE} shell..."
+              docker exec -it "${CONTAINER_PREFIX}-${SERVICE}" /bin/bash
+              ;;
+            
+            update-feeds)
+              echo "📦 Updating OpenVAS feeds (30-60 minutes)..."
+              docker exec "${CONTAINER_PREFIX}-gvmd" greenbone-feed-sync
+              echo "✓ Feed update completed"
+              ;;
+            
+            scan)
+              echo "🔍 Running manual scan..."
+              cd {{ playbook_dir }}
+              ansible-playbook site.yml --tags scan
+              ;;
+            
+            info)
+              echo "╔═══════════════════════════════════════╗"
+              echo "║      OpenVAS System Information       ║"
+              echo "╚═══════════════════════════════════════╝"
+              echo ""
+              echo "👤 User: $CURRENT_USER"
+              echo "📁 Installation: $INSTALL_DIR"
+              echo "📊 Reports: $REPORT_DIR"
+              echo "🌐 Web UI: http://localhost:{{ openvas_web_port }}"
+              echo "🔐 Username: {{ openvas_admin_user }}"
+              echo "🐳 Docker Compose: $COMPOSE"
+              echo ""
+              echo "📦 Containers:"
+              docker ps --filter "name=$CONTAINER_PREFIX" --format "  • {{.Names}}: {{.Status}}"
+              echo ""
+              echo "💾 Disk usage:"
+              docker system df --format "table {{.Type}}\t{{.TotalCount}}\t{{.Size}}"
+              ;;
+            
+            *)
+              echo "╔════════════════════════════════════════╗"
+              echo "║     OpenVAS Helper - server_ansible    ║"
+              echo "╚════════════════════════════════════════╝"
+              echo ""
+              echo "Usage: openvas-helper <command>"
+              echo ""
+              echo "Container Management:"
+              echo "  status        - Show container status"
+              echo "  start         - Start all containers"
+              echo "  stop          - Stop all containers"
+              echo "  restart       - Restart all containers"
+              echo "  logs [svc]    - Show logs (default: gvmd)"
+              echo "  exec [svc]    - Access container shell"
+              echo ""
+              echo "Reports & Scanning:"
+              echo "  reports       - View scan reports"
+              echo "  open-reports  - Open reports folder"
+              echo "  scan          - Run manual scan"
+              echo ""
+              echo "Maintenance:"
+              echo "  update-feeds  - Update vulnerability feeds"
+              echo "  info          - Show system info"
+              echo "  web           - Open web interface"
+              echo ""
+              echo "Examples:"
+              echo "  openvas-helper status"
+              echo "  openvas-helper logs gvmd"
+              echo "  openvas-helper exec ospd"
+              echo "  openvas-helper reports"
+              echo ""
+              echo "Current user: $CURRENT_USER"
+              echo "Docker Compose: $COMPOSE"
+              ;;
+          esac
+        dest: /usr/local/bin/openvas-helper
+        mode: '0755'
+      become: yes
+    
+    - name: Create Desktop shortcuts for server_ansible
+      block:
+        - name: Create WebUI launcher
+          copy:
+            content: |
+              #!/bin/bash
+              firefox http://localhost:{{ openvas_web_port }} 2>/dev/null &
+            dest: "{{ ansible_env.HOME }}/Desktop/OpenVAS-WebUI.sh"
+            mode: '0755'
+        
+        - name: Create report viewer
+          copy:
+            content: |
+              #!/bin/bash
+              REPORT_DIR="{{ playbook_dir }}/roles/openvas/reports"
+              
+              clear
+              echo "╔════════════════════════════════════════════════╗"
+              echo "║         OpenVAS Report Quick View              ║"
+              echo "║         User: {{ ansible_env.USER }}                      ║"
+              echo "╚════════════════════════════════════════════════╝"
+              echo ""
+              
+              if [ ! -d "$REPORT_DIR" ]; then
+                  echo "❌ Reports directory not found!"
+                  echo "   Expected: $REPORT_DIR"
+                  read -p "Press Enter to exit..."
+                  exit 1
+              fi
+              
+              LATEST=$(ls -t "$REPORT_DIR/summaries/summary-"*.txt 2>/dev/null | head -1)
+              if [ -n "$LATEST" ]; then
+                  echo "📊 Latest: $(basename $LATEST)"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  cat "$LATEST"
+              else
+                  echo "⚠️  No reports found yet"
+                  echo ""
+                  echo "To run a scan:"
+                  echo "  openvas-helper scan"
+              fi
+              
+              echo ""
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "📁 Full reports: $REPORT_DIR"
+              echo "🔧 Helper: openvas-helper reports"
+              echo ""
+              read -p "Press Enter to exit..."
+            dest: "{{ ansible_env.HOME }}/Desktop/view-openvas-reports.sh"
+            mode: '0755'
+      become: no
+    
+    - name: Create README in user home
+      copy:
+        content: |
+          # OpenVAS Installation for server_ansible
+          
+          Installed: 2025-10-18 16:48:06 UTC
+          User: {{ ansible_env.USER }}
+          Home: {{ ansible_env.HOME }}
+          
+          ## Quick Access
+          
+          ### Web Interface
+          URL: http://localhost:{{ openvas_web_port }}
+          Username: {{ openvas_admin_user }}
+          Password: {{ openvas_admin_password }}
+          
+          ### Reports Location
+          {{ playbook_dir }}/roles/openvas/reports/
+          ├── xml/       - Raw XML reports
+          ├── summaries/ - Human-readable summaries
+          └── archive/   - Old reports
+          
+          ## Commands
+          
+          ```bash
+          # Check status
+          openvas-helper status
+          
+          # View reports
+          openvas-helper reports
+          
+          # Open web UI
+          openvas-helper web
+          
+          # View logs
+          openvas-helper logs
+          
+          # Get info
+          openvas-helper info
+          ```
+          
+          ## Desktop Shortcuts
+          - OpenVAS-WebUI.sh - Launch web interface
+          - view-openvas-reports.sh - View latest reports
+          
+          ## Troubleshooting
+          
+          ```bash
+          # Check containers
+          docker ps | grep openvas
+          
+          # View gvmd logs
+          docker logs openvas-gvmd
+          
+          # Restart services
+          openvas-helper restart
+          
+          # Update feeds
+          openvas-helper update-feeds
+          ```
+        dest: "{{ ansible_env.HOME }}/OpenVAS-README.md"
+        mode: '0644'
+      become: no
+    
+    - name: Final message
+      debug:
+        msg:
+          - ""
+          - "╔═══════════════════════════════════════════════════════╗"
+          - "║     ✓ OpenVAS Docker Deployment Complete!            ║"
+          - "╚═══════════════════════════════════════════════════════╝"
+          - ""
+          - "👤 User: {{ ansible_env.USER }}"
+          - "📅 Date: {{ ansible_date_time.iso8601 }}"
+          - ""
+          - "🌐 Access:"
+          - "   URL: http://localhost:{{ openvas_web_port }}"
+          - "   User: {{ openvas_admin_user }}"
+          - "   Pass: {{ openvas_admin_password }}"
+          - ""
+          - "📁 Locations:"
+          - "   Install: {{ openvas_install_dir }}"
+          - "   Reports: {{ playbook_dir }}/roles/openvas/reports"
+          - "   Home: {{ ansible_env.HOME }}"
+          - ""
+          - "🚀 Quick Start:"
+          - "   openvas-helper status      # Check services"
+          - "   openvas-helper web         # Open browser"
+          - "   openvas-helper logs        # View logs"
+          - "   openvas-helper reports     # View reports"
+          - "   openvas-helper info        # Full info"
+          - ""
+          - "🖥️  Desktop:"
+          - "   • OpenVAS-WebUI.sh"
+          - "   • view-openvas-reports.sh"
+          - "   • ~/OpenVAS-README.md"
+          - ""
+          - "⏳ Please wait 5-10 minutes for feed updates"
+          - ""
+          - "╚═══════════════════════════════════════════════════════╝"

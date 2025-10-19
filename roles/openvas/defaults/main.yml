@@ -1,0 +1,89 @@
+---
+# ============================================
+# OpenVAS Configuration Variables
+# Updated: 2025-10-18 16:51:54 UTC
+# User: HyHonCuTe (server_ansible)
+# ============================================
+
+# Installation Method
+openvas_install_method: "docker"
+
+# Admin Account
+openvas_admin_user: "admin"
+openvas_admin_password: "SecurePass@2025!"
+
+# Installation Settings
+openvas_version: "22.4"
+openvas_install_dir: "/opt/openvas"
+openvas_data_dir: "/opt/openvas/data"
+openvas_log_dir: "/opt/openvas/logs"
+openvas_config_dir: "/opt/openvas/config"
+
+# Network Settings
+openvas_listen_address: "127.0.0.1"
+openvas_listen_port: 9392
+openvas_web_port: 9392
+openvas_scanner_port: 9391
+
+# Docker Settings
+openvas_docker_network: "openvas-network"
+openvas_container_prefix: "openvas"
+
+# Scan Configuration
+openvas_scan_config_name: "Full and fast"
+openvas_port_list: "All IANA assigned TCP"
+openvas_max_concurrent_scans: 2
+openvas_scan_timeout: 3600
+openvas_alive_test: "ICMP, TCP-ACK Service & ARP Ping"
+
+# ============================================
+# REPORT SETTINGS - CHỈ DÙNG role_path
+# ============================================
+# KHÔNG DÙNG: openvas_report_base_dir, openvas_data_dir cho reports
+# CHỈ DÙNG: role_path tự động trỏ đến thư mục role
+
+openvas_report_dir: "{{ role_path }}/reports"
+openvas_report_xml_dir: "{{ role_path }}/reports/xml"
+openvas_report_summary_dir: "{{ role_path }}/reports/summaries"
+openvas_report_archive_dir: "{{ role_path }}/reports/archive"
+openvas_report_format: "xml"
+openvas_keep_reports_days: 30
+
+# Feed Update Settings
+openvas_auto_update_feeds: true
+openvas_feed_update_hour: "02"
+openvas_feed_update_minute: "00"
+
+# Scheduled Scan Settings
+openvas_enable_scheduled_scan: true
+openvas_scan_schedule_hour: "03"
+openvas_scan_schedule_minute: "00"
+openvas_scan_schedule_day: "*"
+
+# Firewall Settings
+openvas_configure_firewall: false
+
+# Email Notification
+openvas_enable_email_alerts: false
+openvas_smtp_server: "localhost"
+openvas_smtp_port: 25
+openvas_alert_email: "HyHonCuTe@localhost"
+
+# Performance Settings
+openvas_max_hosts: 10
+openvas_max_checks: 4
+openvas_timeout_minutes: 60
+
+# Required packages
+openvas_pip_packages:
+  - docker
+  - docker-compose
+  - lxml
+  - requests
+
+# Target collection from inventory
+openvas_scan_targets: "{{ groups['scan_targets'] | default([]) }}"
+
+# Current user info - SỬ DỤNG BIẾN ANSIBLE
+openvas_ansible_user: "{{ ansible_env.USER }}"
+openvas_ansible_home: "{{ ansible_env.HOME }}"

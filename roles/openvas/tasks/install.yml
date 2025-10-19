@@ -1,0 +1,647 @@
+---
+# ============================================
+# OpenVAS Docker Installation Tasks
+# Updated: 2025-10-18 16:55:42 UTC
+# User: HyHonCuTe
+# ============================================
+
+- name: Display OS information
+  debug:
+    msg:
+      - "╔════════════════════════════════════════╗"
+      - "║   OpenVAS Installation Starting        ║"
+      - "╚════════════════════════════════════════╝"
+      - "OS Family: {{ ansible_os_family }}"
+      - "Distribution: {{ ansible_distribution }}"
+      - "Version: {{ ansible_distribution_version }}"
+      - "User: {{ ansible_env.USER }}"
+      - "Date: 2025-10-18 16:55:42 UTC"
+
+# =============================================
+# INSTALL DOCKER - CentOS/RHEL
+# =============================================
+- name: Install Docker and dependencies (CentOS/RHEL)
+  block:
+    - name: Remove old Docker versions
+      yum:
+        name:
+          - docker
+          - docker-client
+          - docker-client-latest
+          - docker-common
+          - docker-latest
+          - docker-latest-logrotate
+          - docker-logrotate
+          - docker-engine
+        state: absent
+      ignore_errors: yes
+
+    - name: Install required packages
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+          - python3
+          - python3-pip
+          - curl
+          - git
+          - wget
+        state: present
+
+    - name: Add Docker repository
+      command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      args:
+        creates: /etc/yum.repos.d/docker-ce.repo
+
+    - name: Install Docker
+      yum:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_env.USER }}"
+        groups: docker
+        append: yes
+
+    - name: Reset ssh connection to allow user changes to take effect
+      meta: reset_connection
+
+  when: ansible_os_family == "RedHat"
+  become: yes
+
+# =============================================
+# INSTALL DOCKER - Ubuntu/Debian
+# =============================================
+- name: Install Docker (Ubuntu/Debian)
+  block:
+    - name: Install prerequisites
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_env.USER }}"
+        groups: docker
+        append: yes
+
+  when: ansible_os_family == "Debian"
+  become: yes
+
+# =============================================
+# COMMON INSTALLATION STEPS
+# =============================================
+- name: Install Python packages
+  pip:
+    name: "{{ openvas_pip_packages }}"
+    executable: pip3
+    state: present
+  become: yes
+
+- name: Verify Docker installation
+  command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Display Docker version
+  debug:
+    msg: "✓ {{ docker_version.stdout }}"
+
+# =============================================
+# DOCKER COMPOSE DETECTION
+# =============================================
+- name: Check Docker Compose V2 (plugin)
+  command: docker compose version
+  register: docker_compose_v2
+  changed_when: false
+  failed_when: false
+
+- name: Display Docker Compose V2 version
+  debug:
+    msg: "✓ Docker Compose V2: {{ docker_compose_v2.stdout }}"
+  when: docker_compose_v2.rc == 0
+
+- name: Install Docker Compose V1 (standalone fallback)
+  block:
+    - name: Download Docker Compose V1
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Create symlink for docker-compose
+      file:
+        src: /usr/local/bin/docker-compose
+        dest: /usr/bin/docker-compose
+        state: link
+
+    - name: Verify Docker Compose V1
+      command: docker-compose --version
+      register: docker_compose_v1
+      changed_when: false
+
+    - name: Display Docker Compose V1 version
+      debug:
+        msg: "✓ {{ docker_compose_v1.stdout }}"
+  become: yes
+  when: docker_compose_v2.rc != 0
+
+- name: Set Docker Compose command variable
+  set_fact:
+    docker_compose_cmd: "{{ 'docker compose' if docker_compose_v2.rc == 0 else 'docker-compose' }}"
+
+- name: Display Docker Compose command to use
+  debug:
+    msg: "Using Docker Compose command: {{ docker_compose_cmd }}"
+
+# =============================================
+# CREATE DIRECTORIES
+# =============================================
+- name: Create OpenVAS system directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0755'
+  loop:
+    - "{{ openvas_install_dir }}"
+    - "{{ openvas_data_dir }}"
+    - "{{ openvas_log_dir }}"
+    - "{{ openvas_config_dir }}"
+  become: yes
+
+# =============================================
+# CREATE REPORT DIRECTORIES IN ROLE
+# =============================================
+- name: Display report directory information
+  debug:
+    msg:
+      - "════════════════════════════════════════"
+      - "Creating Report Directories:"
+      - "  User: {{ ansible_env.USER }}"
+      - "  Home: {{ ansible_env.HOME }}"
+      - "  Role: {{ role_path }}"
+      - "  Reports: {{ role_path }}/reports"
+      - "════════════════════════════════════════"
+
+- name: Create report base directory
+  file:
+    path: "{{ role_path }}/reports"
+    state: directory
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0755'
+
+- name: Create report subdirectories
+  file:
+    path: "{{ role_path }}/reports/{{ item }}"
+    state: directory
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0755'
+  loop:
+    - xml
+    - summaries
+    - archive
+
+- name: Create .gitkeep files in report directories
+  copy:
+    content: "# This file keeps the directory in git"
+    dest: "{{ role_path }}/reports/{{ item }}/.gitkeep"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0644'
+  loop:
+    - xml
+    - summaries
+    - archive
+
+- name: Create README in reports directory
+  copy:
+    content: |
+      # OpenVAS Scan Reports
+      
+      Created: 2025-10-18 16:55:42 UTC
+      User: {{ ansible_env.USER }}
+      Location: {{ role_path }}/reports
+      
+      ## Directory Structure
+      
+      - **xml/** - Raw XML scan reports from OpenVAS
+      - **summaries/** - Human-readable summary reports
+      - **archive/** - Archived old reports (>30 days)
+      
+      ## Quick View Commands
+      
+      ```bash
+      # View latest summary
+      cat summaries/summary-*.txt | tail -100
+      
+      # List all XML reports
+      ls -lht xml/
+      
+      # Use helper script
+      openvas-helper reports
+      
+      # Open in file manager
+      openvas-helper open-reports
+      ```
+      
+      ## Report Format
+      
+      Each scan generates:
+      1. XML report: `xml/report-<IP>-<timestamp>.xml`
+      2. Summary text: `summaries/summary-<date>.txt`
+      
+      ## Automatic Cleanup
+      
+      Reports older than 30 days are automatically moved to `archive/`
+    dest: "{{ role_path }}/reports/README.md"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0644'
+
+- name: Verify report directory created
+  stat:
+    path: "{{ role_path }}/reports"
+  register: report_dir_check
+
+- name: Display report directory verification
+  debug:
+    msg:
+      - "✓ Reports directory created successfully"
+      - "  Path: {{ report_dir_check.stat.path }}"
+      - "  Exists: {{ report_dir_check.stat.exists }}"
+      - "  Owner: {{ report_dir_check.stat.pw_name | default('N/A') }}"
+      - "  Group: {{ report_dir_check.stat.gr_name | default('N/A') }}"
+      - "  Mode: {{ report_dir_check.stat.mode | default('N/A') }}"
+
+- name: Set proper ownership on install directory
+  file:
+    path: "{{ openvas_install_dir }}"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    recurse: yes
+  become: yes
+
+# =============================================
+# CREATE DOCKER COMPOSE FILE
+# =============================================
+
+- name: Create docker-compose.yml for OpenVAS (All-in-One - Minimal)
+  copy:
+    content: |
+      # OpenVAS All-in-One
+      # User: HyHonCuTe | Date: 2025-10-18 17:22:41 UTC
+      
+      services:
+        openvas:
+          container_name: {{ openvas_container_prefix }}-allinone
+          image: immauss/openvas:latest
+          restart: unless-stopped
+          ports:
+            - {{ openvas_web_port }}:9392
+          environment:
+            USERNAME: {{ openvas_admin_user }}
+            PASSWORD: {{ openvas_admin_password }}
+            REDISDBS: 512
+          volumes:
+            - openvas_data:/data
+      
+      volumes:
+        openvas_data:
+    dest: "{{ openvas_install_dir }}/docker-compose.yml"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0644'
+  become: yes
+
+# =============================================
+# CREATE MANAGEMENT SCRIPTS
+# =============================================
+- name: Create management script
+  copy:
+    content: |
+      #!/bin/bash
+      # OpenVAS Docker Management Script
+      # Created: 2025-10-18 16:55:42 UTC
+      # User: HyHonCuTe
+      
+      set -e
+      
+      # Auto-detect Docker Compose command
+      if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+          DOCKER_COMPOSE="docker compose"
+      elif command -v docker-compose &> /dev/null; then
+          DOCKER_COMPOSE="docker-compose"
+      else
+          echo "❌ Error: Docker Compose not found!"
+          exit 1
+      fi
+      
+      cd {{ openvas_install_dir }}
+      
+      case "$1" in
+          up|start)
+              echo "🚀 Starting OpenVAS containers..."
+              $DOCKER_COMPOSE up -d
+              echo "✓ Started"
+              ;;
+          down|stop)
+              echo "🛑 Stopping OpenVAS containers..."
+              $DOCKER_COMPOSE down
+              echo "✓ Stopped"
+              ;;
+          restart)
+              echo "🔄 Restarting OpenVAS containers..."
+              $DOCKER_COMPOSE restart
+              echo "✓ Restarted"
+              ;;
+          ps|status)
+              echo "═══ Container Status ═══"
+              $DOCKER_COMPOSE ps
+              ;;
+          logs)
+              SERVICE="${2:-gvmd}"
+              echo "═══ Logs for $SERVICE ═══"
+              $DOCKER_COMPOSE logs -f "$SERVICE"
+              ;;
+          pull)
+              echo "📦 Pulling latest images..."
+              $DOCKER_COMPOSE pull
+              echo "✓ Images updated"
+              ;;
+          *)
+              echo "OpenVAS Management Script"
+              echo ""
+              echo "Usage: $0 {up|down|restart|ps|logs [service]|pull}"
+              echo ""
+              echo "Using: $DOCKER_COMPOSE"
+              ;;
+      esac
+    dest: "{{ openvas_install_dir }}/manage.sh"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0755'
+  become: yes
+
+- name: Create installation README
+  copy:
+    content: |
+      # OpenVAS Docker Installation
+      
+      **Installed:** 2025-10-18 16:55:42 UTC  
+      **User:** HyHonCuTe  
+      **Location:** {{ openvas_install_dir }}  
+      **Reports:** {{ role_path }}/reports
+      
+      ## Docker Compose
+      
+      Command detected: `{{ docker_compose_cmd }}`
+      
+      ## Quick Start
+      
+      ```bash
+      cd {{ openvas_install_dir }}
+      
+      # Start services
+      ./manage.sh up
+      
+      # Check status
+      ./manage.sh status
+      
+      # View logs
+      ./manage.sh logs gvmd
+      
+      # Stop services
+      ./manage.sh down
+      ```
+      
+      ## Web Access
+      
+      - **URL:** http://localhost:{{ openvas_web_port }}
+      - **HTTPS:** https://localhost:9393
+      - **Username:** {{ openvas_admin_user }}
+      - **Password:** {{ openvas_admin_password }}
+      
+      ## Manual Commands
+      
+      ```bash
+      # Start all containers
+      {{ docker_compose_cmd }} -f {{ openvas_install_dir }}/docker-compose.yml up -d
+      
+      # Check status
+      {{ docker_compose_cmd }} -f {{ openvas_install_dir }}/docker-compose.yml ps
+      
+      # View logs
+      {{ docker_compose_cmd }} -f {{ openvas_install_dir }}/docker-compose.yml logs -f gvmd
+      
+      # Stop all
+      {{ docker_compose_cmd }} -f {{ openvas_install_dir }}/docker-compose.yml down
+      
+      # Create admin user
+      docker exec {{ openvas_container_prefix }}-gvmd gvmd --create-user={{ openvas_admin_user }} --password={{ openvas_admin_password }}
+      
+      # Update vulnerability feeds
+      docker exec {{ openvas_container_prefix }}-gvmd greenbone-feed-sync
+      ```
+      
+      ## Container List
+      
+      - `{{ openvas_container_prefix }}-redis` - Redis cache
+      - `{{ openvas_container_prefix }}-postgres` - PostgreSQL database
+      - `{{ openvas_container_prefix }}-ospd` - OpenVAS scanner
+      - `{{ openvas_container_prefix }}-gvmd` - GVM daemon
+      - `{{ openvas_container_prefix }}-gsad` - Web interface
+      
+      ## Troubleshooting
+      
+      ```bash
+      # Check container logs
+      docker logs {{ openvas_container_prefix }}-gvmd
+      
+      # Access container shell
+      docker exec -it {{ openvas_container_prefix }}-gvmd /bin/bash
+      
+      # Restart specific service
+      docker restart {{ openvas_container_prefix }}-gvmd
+      
+      # View all containers
+      docker ps | grep {{ openvas_container_prefix }}
+      ```
+      
+      ## Helper Command
+      
+      Use the global helper: `openvas-helper`
+      
+      ```bash
+      openvas-helper status
+      openvas-helper logs
+      openvas-helper web
+      openvas-helper reports
+      ```
+    dest: "{{ openvas_install_dir }}/README.md"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    mode: '0644'
+  become: yes
+
+# =============================================
+# START OPENVAS CONTAINERS
+# =============================================
+- name: Pull OpenVAS Docker images
+  shell: "cd {{ openvas_install_dir }} && {{ docker_compose_cmd }} pull"
+  register: pull_result
+  changed_when: "'Pulling' in pull_result.stdout or 'Pulled' in pull_result.stdout"
+  become: yes
+  become_user: "{{ ansible_env.USER }}"
+
+- name: Start OpenVAS containers
+  shell: "cd {{ openvas_install_dir }} && {{ docker_compose_cmd }} up -d"
+  register: compose_up
+  changed_when: "'Creating' in compose_up.stdout or 'Starting' in compose_up.stdout or 'Created' in compose_up.stdout"
+  become: yes
+  become_user: "{{ ansible_env.USER }}"
+
+- name: Wait for containers to initialize
+  pause:
+    seconds: 30
+    prompt: "⏳ Waiting for OpenVAS containers to initialize..."
+
+- name: Check container status
+  shell: "cd {{ openvas_install_dir }} && {{ docker_compose_cmd }} ps"
+  register: container_status
+  changed_when: false
+  become: yes
+  become_user: "{{ ansible_env.USER }}"
+
+- name: Display container status
+  debug:
+    msg: "{{ container_status.stdout_lines }}"
+
+- name: Wait for GVMD to be ready
+  command: docker exec {{ openvas_container_prefix }}-gvmd gvmd --version
+  register: gvmd_ready
+  until: gvmd_ready.rc == 0
+  retries: 30
+  delay: 10
+  ignore_errors: yes
+
+- name: Display GVMD status
+  debug:
+    msg: "✓ GVMD is ready: {{ gvmd_ready.stdout }}"
+  when: gvmd_ready.rc == 0
+
+- name: Create admin user in GVMD
+  command: >
+    docker exec {{ openvas_container_prefix }}-gvmd
+    gvmd --create-user={{ openvas_admin_user }}
+    --password={{ openvas_admin_password }}
+  register: create_user
+  failed_when: false
+  changed_when: "'User created' in create_user.stdout or create_user.rc == 0"
+  no_log: true
+
+- name: Display user creation result
+  debug:
+    msg: "✓ Admin user configured: {{ openvas_admin_user }}"
+  when: create_user.rc == 0
+
+- name: Update OpenVAS feeds (async - runs in background)
+  command: docker exec {{ openvas_container_prefix }}-gvmd greenbone-feed-sync
+  async: 3600
+  poll: 0
+  register: feed_sync
+  ignore_errors: yes
+
+# =============================================
+# FINAL SUMMARY
+# =============================================
+- name: Installation summary
+  debug:
+    msg:
+      - ""
+      - "╔════════════════════════════════════════════════╗"
+      - "║  ✓ OpenVAS Docker Installation Complete!      ║"
+      - "╚════════════════════════════════════════════════╝"
+      - ""
+      - "📅 Date: 2025-10-18 16:55:42 UTC"
+      - "👤 User: HyHonCuTe"
+      - "📦 Docker Compose: {{ docker_compose_cmd }}"
+      - "📁 Installation: {{ openvas_install_dir }}"
+      - "📊 Reports: {{ role_path }}/reports"
+      - ""
+      - "🌐 Web Access:"
+      - "   URL: http://localhost:{{ openvas_web_port }}"
+      - "   HTTPS: https://localhost:9393"
+      - "   Username: {{ openvas_admin_user }}"
+      - "   Password: {{ openvas_admin_password }}"
+      - ""
+      - "🚀 Quick Commands:"
+      - "   cd {{ openvas_install_dir }}"
+      - "   ./manage.sh status    # Check containers"
+      - "   ./manage.sh logs      # View logs"
+      - "   ./manage.sh restart   # Restart all"
+      - ""
+      - "📊 Feed Sync:"
+      - "   Job ID: {{ feed_sync.ansible_job_id | default('Running in background') }}"
+      - "   ⏳ This may take 30-60 minutes"
+      - "   Check: docker logs -f {{ openvas_container_prefix }}-gvmd"
+      - ""
+      - "📖 Documentation:"
+      - "   {{ openvas_install_dir }}/README.md"
+      - "   {{ role_path }}/reports/README.md"
+      - ""
+      - "🔧 Helper: openvas-helper"
+      - ""
+      - "╚════════════════════════════════════════════════╝"

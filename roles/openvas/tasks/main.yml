@@ -1,0 +1,84 @@
+---
+# OpenVAS Main Tasks
+# Updated: 2025-10-18 17:49:17 UTC
+# User: HyHonCuTe
+
+- name: Display deployment information
+  debug:
+    msg:
+      - "╔════════════════════════════════════════╗"
+      - "║   OpenVAS Deployment Starting          ║"
+      - "╚════════════════════════════════════════╝"
+      - "User: {{ ansible_env.USER }}"
+      - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "Role: {{ role_path }}"
+      - "Date: 2025-10-18 17:49:17 UTC"
+
+- name: Check if running on localhost
+  assert:
+    that:
+      - ansible_connection == "local"
+    fail_msg: "This role must run on localhost (Ansible Controller)"
+    success_msg: "✓ Running on Ansible Controller"
+
+- name: Install OpenVAS
+  import_tasks: install.yml
+  tags: 
+    - install
+    - openvas-install
+
+- name: Configure OpenVAS
+  import_tasks: configure.yml
+  tags:
+    - configure
+    - openvas-config
+
+- name: Setup and run scans
+  import_tasks: scan.yml
+  tags:
+    - scan
+    - openvas-scan
+
+- name: Display completion message
+  debug:
+    msg:
+      - ""
+      - "╔═══════════════════════════════════════════════════════╗"
+      - "║     ✓ OpenVAS Docker Deployment Complete!            ║"
+      - "╚═══════════════════════════════════════════════════════╝"
+      - ""
+      - "👤 User: HyHonCuTe ({{ ansible_env.USER }})"
+      - "📅 Date: 2025-10-18 17:49:17 UTC"
+      - ""
+      - "🌐 Web Interface:"
+      - "   URL: http://localhost:{{ openvas_web_port }}"
+      - "   User: {{ openvas_admin_user }}"
+      - "   Pass: {{ openvas_admin_password }}"
+      - ""
+      - "📁 Locations:"
+      - "   Installation: {{ openvas_install_dir }}"
+      - "   Reports: {{ role_path }}/reports"
+      - "   Docker Compose: {{ openvas_install_dir }}/docker-compose.yml"
+      - ""
+      - "🚀 Quick Start:"
+      - "   1. Wait 5-30 min for first-time initialization"
+      - "   2. Check: /tmp/check-openvas.sh"
+      - "   3. Logs: sudo docker logs -f openvas-allinone"
+      - "   4. Access: http://localhost:{{ openvas_web_port }}"
+      - ""
+      - "🔧 Helper Commands:"
+      - "   openvas-helper status    # Container status"
+      - "   openvas-helper logs      # View logs"
+      - "   openvas-helper web       # Open browser"
+      - "   openvas-helper info      # Full info"
+      - ""
+      - "📖 Documentation:"
+      - "   {{ openvas_install_dir }}/README.md"
+      - "   {{ role_path }}/reports/README.md"
+      - ""
+      - "⏳ Note: First-time setup takes 5-30 minutes"
+      - "   Run: watch -n 30 /tmp/check-openvas.sh"
+      - ""
+      - "╚═══════════════════════════════════════════════════════╝"
+      - ""
+  tags: always

@@ -1,0 +1,260 @@
+---
+- name: Collect scan target IPs from inventory
+  set_fact:
+    target_ips: "{{ groups['scan_targets'] | map('extract', hostvars, 'scan_ip') | list }}"
+  when: openvas_scan_targets | length > 0
+
+- name: Display scan targets
+  debug:
+    msg:
+      - "Scan targets ({{ target_ips | length }}):"
+      - "{{ target_ips }}"
+      - "Reports will be saved to: {{ openvas_report_dir }}"
+  when: target_ips is defined and target_ips | length > 0
+
+- name: Check if there are targets to scan
+  assert:
+    that:
+      - target_ips is defined
+      - target_ips | length > 0
+    fail_msg: "No scan targets found in inventory group 'scan_targets'"
+    success_msg: "Found {{ target_ips | length }} target(s) to scan"
+
+- name: Create targets in OpenVAS
+  shell: |
+    gvm-cli --gmp-username {{ openvas_admin_user }} \
+            --gmp-password {{ openvas_admin_password }} \
+            socket --socketpath /run/gvmd/gvmd.sock \
+            --xml "<create_target><name>Target-{{ item }}</name><hosts>{{ item }}</hosts></create_target>" 2>/dev/null || \
+    echo "Target may already exist"
+  loop: "{{ target_ips }}"
+  become: yes
+  no_log: true
+  register: target_creation
+  changed_when: "'201' in target_creation.stdout or 'Created' in target_creation.stdout"
+  failed_when: false
+
+- name: Get config ID
+  shell: |
+    gvm-cli --gmp-username {{ openvas_admin_user }} \
+            --gmp-password {{ openvas_admin_password }} \
+            socket --socketpath /run/gvmd/gvmd.sock \
+            --xml "<get_configs/>" 2>/dev/null | \
+    xmlstarlet sel -t -m "//config[name='Full and fast']" -v "@id" 2>/dev/null || \
+    gvm-cli --gmp-username {{ openvas_admin_user }} \
+            --gmp-password {{ openvas_admin_password }} \
+            socket --socketpath /run/gvmd/gvmd.sock \
+            --xml "<get_configs/>" 2>/dev/null | \
+    grep -oP 'config id="\K[^"]+' | head -1
+  become: yes
+  no_log: true
+  register: config_id
+  changed_when: false
+
+- name: Get scanner ID
+  shell: |
+    gvm-cli --gmp-username {{ openvas_admin_user }} \
+            --gmp-password {{ openvas_admin_password }} \
+            socket --socketpath /run/gvmd/gvmd.sock \
+            --xml "<get_scanners/>" 2>/dev/null | \
+    grep -oP 'scanner id="\K[^"]+' | head -1
+  become: yes
+  no_log: true
+  register: scanner_id
+  changed_when: false
+
+- name: Display scanner configuration
+  debug:
+    msg:
+      - "Config ID: {{ config_id.stdout }}"
+      - "Scanner ID: {{ scanner_id.stdout }}"
+
+- name: Create scan tasks
+  shell: |
+    TARGET_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                        --gmp-password {{ openvas_admin_password }} \
+                        socket --socketpath /run/gvmd/gvmd.sock \
+                        --xml "<get_targets/>" 2>/dev/null | \
+                        grep -A5 "Target-{{ item }}" | \
+                        grep -oP 'target id="\K[^"]+' | head -1)
+    
+    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
+    
+    EXISTING_TASK=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                            --gmp-password {{ openvas_admin_password }} \
+                            socket --socketpath /run/gvmd/gvmd.sock \
+                            --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
+                            grep -oP 'task id="\K[^"]+' | head -1)
+    
+    if [ -z "$EXISTING_TASK" ]; then
+      gvm-cli --gmp-username {{ openvas_admin_user }} \
+              --gmp-password {{ openvas_admin_password }} \
+              socket --socketpath /run/gvmd/gvmd.sock \
+              --xml "<create_task><name>$TASK_NAME</name><target id='$TARGET_ID'/><config id='{{ config_id.stdout }}'/><scanner id='{{ scanner_id.stdout }}'/></create_task>" 2>/dev/null
+      echo "CREATED"
+    else
+      echo "EXISTS:$EXISTING_TASK"
+    fi
+  loop: "{{ target_ips }}"
+  become: yes
+  no_log: true
+  register: task_creation
+  changed_when: "'CREATED' in task_creation.stdout"
+
+- name: Start scan tasks
+  shell: |
+    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
+    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                      --gmp-password {{ openvas_admin_password }} \
+                      socket --socketpath /run/gvmd/gvmd.sock \
+                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
+                      grep -oP 'task id="\K[^"]+' | head -1)
+    
+    if [ -n "$TASK_ID" ]; then
+      gvm-cli --gmp-username {{ openvas_admin_user }} \
+              --gmp-password {{ openvas_admin_password }} \
+              socket --socketpath /run/gvmd/gvmd.sock \
+              --xml "<start_task task_id='$TASK_ID'/>" 2>/dev/null
+      echo "STARTED:$TASK_ID"
+    fi
+  loop: "{{ target_ips }}"
+  become: yes
+  no_log: true
+  register: scan_start
+  async: 300
+  poll: 0
+
+- name: Wait for scans to complete
+  shell: |
+    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
+    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                      --gmp-password {{ openvas_admin_password }} \
+                      socket --socketpath /run/gvmd/gvmd.sock \
+                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
+                      grep -oP 'task id="\K[^"]+' | head -1)
+    
+    STATUS=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                    --gmp-password {{ openvas_admin_password }} \
+                    socket --socketpath /run/gvmd/gvmd.sock \
+                    --xml "<get_tasks task_id='$TASK_ID'/>" 2>/dev/null | \
+                    grep -oP '<status>\K[^<]+' | head -1)
+    
+    echo "$STATUS"
+  loop: "{{ target_ips }}"
+  become: yes
+  no_log: true
+  register: scan_status
+  until: "'Done' in scan_status.stdout or 'Stopped' in scan_status.stdout or 'Interrupted' in scan_status.stdout"
+  retries: 120
+  delay: 30
+  ignore_errors: yes
+
+# ===== LƯU REPORTS VÀO THƯ MỤC ROLE =====
+- name: Create temporary directory for reports
+  tempfile:
+    state: directory
+    suffix: _openvas
+  register: temp_report_dir
+  become: yes
+
+- name: Export reports to temp directory
+  shell: |
+    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
+    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                      --gmp-password {{ openvas_admin_password }} \
+                      socket --socketpath /run/gvmd/gvmd.sock \
+                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
+                      grep -oP 'task id="\K[^"]+' | head -1)
+    
+    REPORT_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
+                        --gmp-password {{ openvas_admin_password }} \
+                        socket --socketpath /run/gvmd/gvmd.sock \
+                        --xml "<get_tasks task_id='$TASK_ID'/>" 2>/dev/null | \
+                        grep -oP 'last_report.*?report id="\K[^"]+' | head -1)
+    
+    REPORT_FILE="{{ temp_report_dir.path }}/report-{{ item }}-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '-') }}.xml"
+    
+    gvm-cli --gmp-username {{ openvas_admin_user }} \
+            --gmp-password {{ openvas_admin_password }} \
+            socket --socketpath /run/gvmd/gvmd.sock \
+            --xml "<get_reports report_id='$REPORT_ID' format_id='a994b278-1f62-11e1-96ac-406186ea4fc5'/>" \
+            > "$REPORT_FILE" 2>/dev/null
+    
+    echo "$REPORT_FILE"
+  loop: "{{ target_ips }}"
+  become: yes
+  no_log: true
+  register: report_export
+
+- name: Copy reports to role directory
+  copy:
+    src: "{{ item }}"
+    dest: "{{ openvas_report_xml_dir }}/"
+    remote_src: yes
+    mode: '0644'
+  with_fileglob:
+    - "{{ temp_report_dir.path }}/report-*.xml"
+  become: yes
+  delegate_to: localhost
+
+- name: Parse reports and generate summary
+  shell: |
+    python3 /usr/local/bin/openvas-parser.py {{ temp_report_dir.path }}/report-*.xml \
+            > {{ temp_report_dir.path }}/summary-{{ ansible_date_time.date }}.txt 2>&1
+  become: yes
+  ignore_errors: yes
+
+- name: Copy summary to role directory
+  copy:
+    src: "{{ temp_report_dir.path }}/summary-{{ ansible_date_time.date }}.txt"
+    dest: "{{ openvas_report_summary_dir }}/"
+    remote_src: yes
+    mode: '0644'
+  become: yes
+  delegate_to: localhost
+  ignore_errors: yes
+
+- name: Set proper permissions on reports
+  file:
+    path: "{{ openvas_report_dir }}"
+    owner: "{{ openvas_ansible_user }}"
+    group: "{{ openvas_ansible_user }}"
+    recurse: yes
+  delegate_to: localhost
+  become: no
+
+- name: Clean up temp directory
+  file:
+    path: "{{ temp_report_dir.path }}"
+    state: absent
+  become: yes
+  ignore_errors: yes
+
+- name: Display scan summary
+  shell: cat {{ openvas_report_summary_dir }}/summary-{{ ansible_date_time.date }}.txt
+  register: summary_content
+  delegate_to: localhost
+  ignore_errors: yes
+
+- name: Show summary
+  debug:
+    msg: "{{ summary_content.stdout_lines }}"
+  when: summary_content.rc == 0
+
+- name: Display report locations
+  debug:
+    msg:
+      - "========================================="
+      - "Scan completed successfully!"
+      - "========================================="
+      - ""
+      - "Reports saved to:"
+      - "  XML: {{ openvas_report_xml_dir }}/"
+      - "  Summary: {{ openvas_report_summary_dir }}/summary-{{ ansible_date_time.date }}.txt"
+      - ""
+      - "View commands:"
+      - "  cd {{ openvas_report_dir }}"
+      - "  cat summaries/summary-{{ ansible_date_time.date }}.txt"
+      - "  ls -lh xml/"
+      - ""
+      - "Full path: {{ openvas_report_dir }}"
