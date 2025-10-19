@@ -1,260 +1,314 @@
 ---
-- name: Collect scan target IPs from inventory
+# OpenVAS Scan Tasks - Manual Web UI Instructions
+# Updated: 2025-10-19 08:56:23 UTC
+# User: HyHonCuTe
+
+- name: Check if scan_targets group exists
   set_fact:
-    target_ips: "{{ groups['scan_targets'] | map('extract', hostvars, 'scan_ip') | list }}"
-  when: openvas_scan_targets | length > 0
+    has_scan_targets: "{{ 'scan_targets' in groups and groups['scan_targets'] | length > 0 }}"
+
+- name: Collect scan target IPs
+  set_fact:
+    target_ips: "{{ groups['scan_targets'] | map('extract', hostvars, 'scan_ip') | select | list }}"
+  when: has_scan_targets
+
+- name: Set empty target list if no targets
+  set_fact:
+    target_ips: []
+  when: not has_scan_targets
 
 - name: Display scan targets
   debug:
     msg:
-      - "Scan targets ({{ target_ips | length }}):"
-      - "{{ target_ips }}"
-      - "Reports will be saved to: {{ openvas_report_dir }}"
-  when: target_ips is defined and target_ips | length > 0
+      - "╔════════════════════════════════════════╗"
+      - "║   Scan Targets Found                   ║"
+      - "╚════════════════════════════════════════╝"
+      - "Count: {{ target_ips | length }}"
+      - "IPs: {{ target_ips | join(', ') if target_ips | length > 0 else 'None' }}"
 
-- name: Check if there are targets to scan
-  assert:
-    that:
-      - target_ips is defined
-      - target_ips | length > 0
-    fail_msg: "No scan targets found in inventory group 'scan_targets'"
-    success_msg: "Found {{ target_ips | length }} target(s) to scan"
+- name: Skip if no targets
+  block:
+    - name: Display no targets message
+      debug:
+        msg:
+          - "⚠️  No scan targets found!"
+          - "Add targets to inventory/hosts.yaml under 'scan_targets' group"
+    
+    - name: End play
+      meta: end_play
+  when: target_ips | length == 0
 
-- name: Create targets in OpenVAS
-  shell: |
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<create_target><name>Target-{{ item }}</name><hosts>{{ item }}</hosts></create_target>" 2>/dev/null || \
-    echo "Target may already exist"
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: target_creation
-  changed_when: "'201' in target_creation.stdout or 'Created' in target_creation.stdout"
+# Check OpenVAS readiness
+- name: Check container health
+  shell: docker inspect {{ openvas_container_prefix }}-allinone --format='{% raw %}{{.State.Health.Status}}{% endraw %}'
+  register: container_health
+  changed_when: false
   failed_when: false
 
-- name: Get config ID
-  shell: |
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_configs/>" 2>/dev/null | \
-    xmlstarlet sel -t -m "//config[name='Full and fast']" -v "@id" 2>/dev/null || \
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_configs/>" 2>/dev/null | \
-    grep -oP 'config id="\K[^"]+' | head -1
-  become: yes
-  no_log: true
-  register: config_id
-  changed_when: false
+- name: Check web UI accessibility
+  uri:
+    url: "http://localhost:{{ openvas_web_port }}"
+    method: GET
+    status_code: [200, 302, 405]
+    timeout: 5
+  register: web_check
+  failed_when: false
 
-- name: Get scanner ID
-  shell: |
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_scanners/>" 2>/dev/null | \
-    grep -oP 'scanner id="\K[^"]+' | head -1
-  become: yes
-  no_log: true
-  register: scanner_id
-  changed_when: false
-
-- name: Display scanner configuration
+- name: Display OpenVAS readiness status
   debug:
     msg:
-      - "Config ID: {{ config_id.stdout }}"
-      - "Scanner ID: {{ scanner_id.stdout }}"
+      - "════════════════════════════════════════"
+      - "OpenVAS Status:"
+      - "  Container Health: {{ container_health.stdout | default('unknown') }}"
+      - "  Web UI: {{ 'Accessible ✅' if web_check is defined and web_check.status is defined and web_check.status in [200, 302, 405] else 'Not ready ⏳' }}"
+      - "════════════════════════════════════════"
 
-- name: Create scan tasks
-  shell: |
-    TARGET_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                        --gmp-password {{ openvas_admin_password }} \
-                        socket --socketpath /run/gvmd/gvmd.sock \
-                        --xml "<get_targets/>" 2>/dev/null | \
-                        grep -A5 "Target-{{ item }}" | \
-                        grep -oP 'target id="\K[^"]+' | head -1)
-    
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    
-    EXISTING_TASK=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                            --gmp-password {{ openvas_admin_password }} \
-                            socket --socketpath /run/gvmd/gvmd.sock \
-                            --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                            grep -oP 'task id="\K[^"]+' | head -1)
-    
-    if [ -z "$EXISTING_TASK" ]; then
-      gvm-cli --gmp-username {{ openvas_admin_user }} \
-              --gmp-password {{ openvas_admin_password }} \
-              socket --socketpath /run/gvmd/gvmd.sock \
-              --xml "<create_task><name>$TASK_NAME</name><target id='$TARGET_ID'/><config id='{{ config_id.stdout }}'/><scanner id='{{ scanner_id.stdout }}'/></create_task>" 2>/dev/null
-      echo "CREATED"
-    else
-      echo "EXISTS:$EXISTING_TASK"
-    fi
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: task_creation
-  changed_when: "'CREATED' in task_creation.stdout"
-
-- name: Start scan tasks
-  shell: |
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                      --gmp-password {{ openvas_admin_password }} \
-                      socket --socketpath /run/gvmd/gvmd.sock \
-                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                      grep -oP 'task id="\K[^"]+' | head -1)
-    
-    if [ -n "$TASK_ID" ]; then
-      gvm-cli --gmp-username {{ openvas_admin_user }} \
-              --gmp-password {{ openvas_admin_password }} \
-              socket --socketpath /run/gvmd/gvmd.sock \
-              --xml "<start_task task_id='$TASK_ID'/>" 2>/dev/null
-      echo "STARTED:$TASK_ID"
-    fi
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: scan_start
-  async: 300
-  poll: 0
-
-- name: Wait for scans to complete
-  shell: |
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                      --gmp-password {{ openvas_admin_password }} \
-                      socket --socketpath /run/gvmd/gvmd.sock \
-                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                      grep -oP 'task id="\K[^"]+' | head -1)
-    
-    STATUS=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                    --gmp-password {{ openvas_admin_password }} \
-                    socket --socketpath /run/gvmd/gvmd.sock \
-                    --xml "<get_tasks task_id='$TASK_ID'/>" 2>/dev/null | \
-                    grep -oP '<status>\K[^<]+' | head -1)
-    
-    echo "$STATUS"
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: scan_status
-  until: "'Done' in scan_status.stdout or 'Stopped' in scan_status.stdout or 'Interrupted' in scan_status.stdout"
-  retries: 120
-  delay: 30
-  ignore_errors: yes
-
-# ===== LƯU REPORTS VÀO THƯ MỤC ROLE =====
-- name: Create temporary directory for reports
-  tempfile:
-    state: directory
-    suffix: _openvas
-  register: temp_report_dir
-  become: yes
-
-- name: Export reports to temp directory
-  shell: |
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                      --gmp-password {{ openvas_admin_password }} \
-                      socket --socketpath /run/gvmd/gvmd.sock \
-                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                      grep -oP 'task id="\K[^"]+' | head -1)
-    
-    REPORT_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                        --gmp-password {{ openvas_admin_password }} \
-                        socket --socketpath /run/gvmd/gvmd.sock \
-                        --xml "<get_tasks task_id='$TASK_ID'/>" 2>/dev/null | \
-                        grep -oP 'last_report.*?report id="\K[^"]+' | head -1)
-    
-    REPORT_FILE="{{ temp_report_dir.path }}/report-{{ item }}-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '-') }}.xml"
-    
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_reports report_id='$REPORT_ID' format_id='a994b278-1f62-11e1-96ac-406186ea4fc5'/>" \
-            > "$REPORT_FILE" 2>/dev/null
-    
-    echo "$REPORT_FILE"
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: report_export
-
-- name: Copy reports to role directory
+- name: Create detailed scan instructions file
   copy:
-    src: "{{ item }}"
-    dest: "{{ openvas_report_xml_dir }}/"
-    remote_src: yes
+    content: |
+      # OpenVAS Scanning Guide
+      # Created: 2025-10-19 08:56:23 UTC
+      # User: HyHonCuTe
+      # Repository: HyHonCuTe/ansible
+      
+      ## Web UI Access
+      
+      URL: http://localhost:{{ openvas_web_port }}
+      Username: {{ openvas_admin_user }}
+      Password: {{ openvas_admin_password }}
+      
+      ## Targets to Scan
+      
+      {% if target_ips | length > 0 %}
+      {% for ip in target_ips %}
+      - {{ ip }}
+      {% endfor %}
+      {% else %}
+      No targets defined. Add to inventory/hosts.yaml.
+      {% endif %}
+      
+      ## Step-by-Step Scanning Guide
+      
+      ### Step 1: Login to Web UI
+      
+      1. Open browser: http://localhost:{{ openvas_web_port }}
+      2. Enter credentials:
+         - Username: {{ openvas_admin_user }}
+         - Password: {{ openvas_admin_password }}
+      3. Click "Sign In"
+      
+      ### Step 2: Create Target
+      
+      1. In top menu, click **Configuration**
+      2. Click **Targets**
+      3. Click **⭐** icon (New Target)
+      4. Fill in form:
+         - **Name:** Linux Servers
+         - **Hosts:** {{ target_ips | join(', ') if target_ips | length > 0 else '192.168.1.69' }}
+         - **Port List:** OpenVAS Default (leave default)
+         - **Alive Test:** ICMP Ping (leave default)
+      5. Click **Save**
+      
+      ### Step 3: Create Scan Task
+      
+      1. In top menu, click **Scans**
+      2. Click **Tasks**
+      3. Click **⭐** icon (New Task)
+      4. Fill in form:
+         - **Name:** Vulnerability Scan {{ ansible_date_time.date }}
+         - **Scan Targets:** Select "Linux Servers" from dropdown
+         - **Scan Config:** Full and fast
+         - **Scanner:** OpenVAS Default
+         - **Schedule:** -- (leave empty for manual)
+      5. Click **Save**
+      
+      ### Step 4: Start Scan
+      
+      1. In Tasks list, find "Vulnerability Scan {{ ansible_date_time.date }}"
+      2. Click **▶️** (Start icon) in the Actions column
+      3. Confirm if prompted
+      4. Monitor progress:
+         - Progress bar shows completion percentage
+         - Status changes: Requested → Running → Done
+         - Typical scan time: 30-60 minutes
+      
+      ### Step 5: View Results
+      
+      1. When Status = **Done**
+      2. In top menu, click **Scans**
+      3. Click **Reports**
+      4. Click on the latest report (will have timestamp)
+      5. View summary:
+         - High/Medium/Low severity counts
+         - Affected hosts
+         - CVE details
+      
+      ### Step 6: Export Report
+      
+      1. In report view, click **Download** icon (↓)
+      2. Select format:
+         - **XML** for detailed data
+         - **PDF** for readable document
+         - **CSV** for spreadsheet
+      3. Save to: {{ role_path }}/reports/xml/
+      4. Manually copy exported file to reports directory
+      
+      ## Quick Reference
+      
+      ### Target IPs
+      ```
+      {% for ip in target_ips %}
+      {{ ip }}
+      {% endfor %}
+      ```
+      
+      ### Container Commands
+      
+      ```bash
+      # Check status
+      sudo docker ps --filter name={{ openvas_container_prefix }}
+      
+      # View logs
+      sudo docker logs -f {{ openvas_container_prefix }}-allinone
+      
+      # Restart container
+      cd /opt/openvas && sudo docker compose restart
+      
+      # Check health
+      sudo docker inspect {{ openvas_container_prefix }}-allinone --format='{% raw %}{{.State.Health.Status}}{% endraw %}'
+      ```
+      
+      ### Helper Commands
+      
+      ```bash
+      openvas-helper status
+      openvas-helper logs
+      openvas-helper web
+      /tmp/check-openvas.sh
+      ```
+      
+      ## Troubleshooting
+      
+      ### Container not healthy
+      ```bash
+      # Check feed sync progress
+      sudo docker logs {{ openvas_container_prefix }}-allinone 2>&1 | grep -i "sync\|feed"
+      
+      # Wait for "Feed synchronization successful"
+      ```
+      
+      ### Web UI not accessible
+      ```bash
+      # Check port
+      sudo ss -tlnp | grep {{ openvas_web_port }}
+      
+      # Test HTTP
+      curl -I http://localhost:{{ openvas_web_port }}
+      ```
+      
+      ### Scan taking too long
+      - Typical scan time: 30-60 minutes for single host
+      - Can be 2-4 hours for complex networks
+      - Monitor progress in Web UI
+      
+      ## Report Locations
+      
+      - Manual exports: Save to {{ role_path }}/reports/xml/
+      - Summaries: {{ role_path }}/reports/summaries/
+      - Archives: {{ role_path }}/reports/archive/
+      
+      ## Automated Scanning (Future)
+      
+      Will be implemented using:
+      - Python script with python-gvm library
+      - Direct GMP protocol access
+      - Automatic report export and parsing
+      
+      For now, follow manual steps above.
+      
+      ---
+      End of Guide
+    dest: "{{ role_path }}/reports/SCAN-GUIDE.txt"
     mode: '0644'
-  with_fileglob:
-    - "{{ temp_report_dir.path }}/report-*.xml"
-  become: yes
-  delegate_to: localhost
 
-- name: Parse reports and generate summary
-  shell: |
-    python3 /usr/local/bin/openvas-parser.py {{ temp_report_dir.path }}/report-*.xml \
-            > {{ temp_report_dir.path }}/summary-{{ ansible_date_time.date }}.txt 2>&1
-  become: yes
-  ignore_errors: yes
-
-- name: Copy summary to role directory
-  copy:
-    src: "{{ temp_report_dir.path }}/summary-{{ ansible_date_time.date }}.txt"
-    dest: "{{ openvas_report_summary_dir }}/"
-    remote_src: yes
-    mode: '0644'
-  become: yes
-  delegate_to: localhost
-  ignore_errors: yes
-
-- name: Set proper permissions on reports
-  file:
-    path: "{{ openvas_report_dir }}"
-    owner: "{{ openvas_ansible_user }}"
-    group: "{{ openvas_ansible_user }}"
-    recurse: yes
-  delegate_to: localhost
-  become: no
-
-- name: Clean up temp directory
-  file:
-    path: "{{ temp_report_dir.path }}"
-    state: absent
-  become: yes
-  ignore_errors: yes
-
-- name: Display scan summary
-  shell: cat {{ openvas_report_summary_dir }}/summary-{{ ansible_date_time.date }}.txt
-  register: summary_content
-  delegate_to: localhost
-  ignore_errors: yes
-
-- name: Show summary
-  debug:
-    msg: "{{ summary_content.stdout_lines }}"
-  when: summary_content.rc == 0
-
-- name: Display report locations
+- name: Display manual scanning instructions
   debug:
     msg:
-      - "========================================="
-      - "Scan completed successfully!"
-      - "========================================="
       - ""
-      - "Reports saved to:"
-      - "  XML: {{ openvas_report_xml_dir }}/"
-      - "  Summary: {{ openvas_report_summary_dir }}/summary-{{ ansible_date_time.date }}.txt"
+      - "╔════════════════════════════════════════════════╗"
+      - "║   OpenVAS Manual Scanning Instructions         ║"
+      - "╚════════════════════════════════════════════════╝"
       - ""
-      - "View commands:"
-      - "  cd {{ openvas_report_dir }}"
-      - "  cat summaries/summary-{{ ansible_date_time.date }}.txt"
-      - "  ls -lh xml/"
+      - "✅ Container: {{ container_health.stdout | default('checking...') }}"
+      - "✅ Web UI: {{ 'Ready' if web_check is defined and web_check.status is defined and web_check.status in [200, 302, 405] else 'Not Ready' }}"
       - ""
-      - "Full path: {{ openvas_report_dir }}"
+      - "🌐 Web Interface:"
+      - "   URL: http://localhost:{{ openvas_web_port }}"
+      - "   Username: {{ openvas_admin_user }}"
+      - "   Password: {{ openvas_admin_password }}"
+      - ""
+      - "🎯 Targets ({{ target_ips | length }}):"
+      - "{{ target_ips | map('regex_replace', '^(.*)$', '   • \\1') | join('\n') }}"
+      - ""
+      - "📋 Quick Steps:"
+      - "   1. Login → Configuration → Targets → ⭐ New"
+      - "      Hosts: {{ target_ips | join(', ') }}"
+      - "   2. Scans → Tasks → ⭐ New"
+      - "      Target: (select), Config: Full and fast"
+      - "   3. Click ▶️ Start"
+      - "   4. Wait 30-60 minutes"
+      - "   5. Scans → Reports → View results"
+      - ""
+      - "📁 Full guide:"
+      - "   {{ role_path }}/reports/SCAN-GUIDE.txt"
+      - ""
+      - "   cat {{ role_path }}/reports/SCAN-GUIDE.txt"
+      - ""
+      - "╚════════════════════════════════════════════════╝"
+
+- name: Create quick reference card
+  copy:
+    content: |
+      ╔════════════════════════════════════════════════╗
+      ║        OpenVAS Quick Reference Card            ║
+      ╚════════════════════════════════════════════════╝
+      
+      🌐 Web UI: http://localhost:{{ openvas_web_port }}
+      👤 Login: {{ openvas_admin_user }} / {{ openvas_admin_password }}
+      
+      🎯 Targets: {{ target_ips | join(', ') if target_ips | length > 0 else 'None' }}
+      
+      📋 Scan Steps:
+      1. Configuration → Targets → ⭐ New
+      2. Scans → Tasks → ⭐ New
+      3. Click ▶️ Start
+      4. Scans → Reports → View
+      
+      📁 Reports: {{ role_path }}/reports/
+      
+      🔧 Commands:
+        openvas-helper status
+        openvas-helper web
+        openvas-helper logs
+      
+      📖 Full guide:
+        cat {{ role_path }}/reports/SCAN-GUIDE.txt
+    dest: "{{ role_path }}/reports/QUICK-REFERENCE.txt"
+    mode: '0644'
+
+- name: Final scan setup message
+  debug:
+    msg:
+      - ""
+      - "✅ Scan setup complete!"
+      - ""
+      - "📖 Guides created:"
+      - "   • {{ role_path }}/reports/SCAN-GUIDE.txt"
+      - "   • {{ role_path }}/reports/QUICK-REFERENCE.txt"
+      - ""
+      - "🚀 Start scanning:"
+      - "   firefox http://localhost:{{ openvas_web_port }}"
+      - ""
+      - "💡 Tip: Keep guide open while scanning"
+      - "   cat {{ role_path }}/reports/SCAN-GUIDE.txt"
+      - ""
