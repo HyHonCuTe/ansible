@@ -1,260 +1,614 @@
 ---
-- name: Collect scan target IPs from inventory
-  set_fact:
-    target_ips: "{{ groups['scan_targets'] | map('extract', hostvars, 'scan_ip') | list }}"
-  when: openvas_scan_targets | length > 0
+# OpenVAS Automated Scanning with Ansible
+# Created: 2025-10-19 09:30:54 UTC
+# User: HyHonCuTe
+# Repository: HyHonCuTe/ansible
 
-- name: Display scan targets
+- name: Check if scan_targets group exists
+  set_fact:
+    has_scan_targets: "{{ 'scan_targets' in groups and groups['scan_targets'] | length > 0 }}"
+
+- name: Collect scan target IPs
+  set_fact:
+    target_ips: "{{ groups['scan_targets'] | map('extract', hostvars, 'scan_ip') | select | list }}"
+  when: has_scan_targets
+
+- name: Set empty target list if no targets
+  set_fact:
+    target_ips: []
+  when: not has_scan_targets
+
+- name: End if no targets
+  block:
+    - name: Display no targets message
+      debug:
+        msg:
+          - "⚠️  No scan targets found!"
+          - "Add targets to inventory/hosts.yaml under 'scan_targets' group"
+    - meta: end_play
+  when: target_ips | length == 0
+
+- name: Display detected targets
   debug:
     msg:
-      - "Scan targets ({{ target_ips | length }}):"
-      - "{{ target_ips }}"
-      - "Reports will be saved to: {{ openvas_report_dir }}"
-  when: target_ips is defined and target_ips | length > 0
+      - "╔════════════════════════════════════════╗"
+      - "║   Automated OpenVAS Scanning           ║"
+      - "╚════════════════════════════════════════╝"
+      - "Targets: {{ target_ips | length }}"
+      - "IPs: {{ target_ips | join(', ') }}"
 
-- name: Check if there are targets to scan
-  assert:
-    that:
-      - target_ips is defined
-      - target_ips | length > 0
-    fail_msg: "No scan targets found in inventory group 'scan_targets'"
-    success_msg: "Found {{ target_ips | length }} target(s) to scan"
+# Check OpenVAS readiness
+- name: Check container status
+  shell: docker ps --filter name={{ openvas_container_prefix }}-allinone --format '{% raw %}{{.Status}}{% endraw %}'
+  register: container_status
+  changed_when: false
+  failed_when: container_status.stdout == ""
 
-- name: Create targets in OpenVAS
-  shell: |
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<create_target><name>Target-{{ item }}</name><hosts>{{ item }}</hosts></create_target>" 2>/dev/null || \
-    echo "Target may already exist"
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: target_creation
-  changed_when: "'201' in target_creation.stdout or 'Created' in target_creation.stdout"
+- name: Display container status
+  debug:
+    msg: "Container status: {{ container_status.stdout }}"
+
+- name: Wait for OpenVAS to be healthy
+  shell: docker inspect {{ openvas_container_prefix }}-allinone --format '{% raw %}{{.State.Health.Status}}{% endraw %}'
+  register: health_check
+  until: health_check.stdout == "healthy"
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Display health status
+  debug:
+    msg: "✅ OpenVAS is healthy and ready"
+
+# Check GMP port availability
+- name: Check if GMP port 9390 is listening in container
+  shell: docker exec {{ openvas_container_prefix }}-allinone ss -tlnp | grep 9390 || docker exec {{ openvas_container_prefix }}-allinone netstat -tlnp | grep 9390 || echo "checking"
+  register: gmp_port_check
+  changed_when: false
   failed_when: false
 
-- name: Get config ID
-  shell: |
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_configs/>" 2>/dev/null | \
-    xmlstarlet sel -t -m "//config[name='Full and fast']" -v "@id" 2>/dev/null || \
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_configs/>" 2>/dev/null | \
-    grep -oP 'config id="\K[^"]+' | head -1
-  become: yes
-  no_log: true
-  register: config_id
-  changed_when: false
-
-- name: Get scanner ID
-  shell: |
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_scanners/>" 2>/dev/null | \
-    grep -oP 'scanner id="\K[^"]+' | head -1
-  become: yes
-  no_log: true
-  register: scanner_id
-  changed_when: false
-
-- name: Display scanner configuration
+- name: Display GMP port status
   debug:
-    msg:
-      - "Config ID: {{ config_id.stdout }}"
-      - "Scanner ID: {{ scanner_id.stdout }}"
+    msg: "GMP port 9390 status: {{ 'Available' if '9390' in gmp_port_check.stdout else 'Checking...' }}"
 
-- name: Create scan tasks
-  shell: |
-    TARGET_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                        --gmp-password {{ openvas_admin_password }} \
-                        socket --socketpath /run/gvmd/gvmd.sock \
-                        --xml "<get_targets/>" 2>/dev/null | \
-                        grep -A5 "Target-{{ item }}" | \
-                        grep -oP 'target id="\K[^"]+' | head -1)
-    
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    
-    EXISTING_TASK=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                            --gmp-password {{ openvas_admin_password }} \
-                            socket --socketpath /run/gvmd/gvmd.sock \
-                            --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                            grep -oP 'task id="\K[^"]+' | head -1)
-    
-    if [ -z "$EXISTING_TASK" ]; then
-      gvm-cli --gmp-username {{ openvas_admin_user }} \
-              --gmp-password {{ openvas_admin_password }} \
-              socket --socketpath /run/gvmd/gvmd.sock \
-              --xml "<create_task><name>$TASK_NAME</name><target id='$TARGET_ID'/><config id='{{ config_id.stdout }}'/><scanner id='{{ scanner_id.stdout }}'/></create_task>" 2>/dev/null
-      echo "CREATED"
-    else
-      echo "EXISTS:$EXISTING_TASK"
-    fi
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: task_creation
-  changed_when: "'CREATED' in task_creation.stdout"
-
-- name: Start scan tasks
-  shell: |
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                      --gmp-password {{ openvas_admin_password }} \
-                      socket --socketpath /run/gvmd/gvmd.sock \
-                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                      grep -oP 'task id="\K[^"]+' | head -1)
-    
-    if [ -n "$TASK_ID" ]; then
-      gvm-cli --gmp-username {{ openvas_admin_user }} \
-              --gmp-password {{ openvas_admin_password }} \
-              socket --socketpath /run/gvmd/gvmd.sock \
-              --xml "<start_task task_id='$TASK_ID'/>" 2>/dev/null
-      echo "STARTED:$TASK_ID"
-    fi
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: scan_start
-  async: 300
-  poll: 0
-
-- name: Wait for scans to complete
-  shell: |
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                      --gmp-password {{ openvas_admin_password }} \
-                      socket --socketpath /run/gvmd/gvmd.sock \
-                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                      grep -oP 'task id="\K[^"]+' | head -1)
-    
-    STATUS=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                    --gmp-password {{ openvas_admin_password }} \
-                    socket --socketpath /run/gvmd/gvmd.sock \
-                    --xml "<get_tasks task_id='$TASK_ID'/>" 2>/dev/null | \
-                    grep -oP '<status>\K[^<]+' | head -1)
-    
-    echo "$STATUS"
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: scan_status
-  until: "'Done' in scan_status.stdout or 'Stopped' in scan_status.stdout or 'Interrupted' in scan_status.stdout"
-  retries: 120
-  delay: 30
-  ignore_errors: yes
-
-# ===== LƯU REPORTS VÀO THƯ MỤC ROLE =====
-- name: Create temporary directory for reports
-  tempfile:
+# Create GMP scripts using TLS connection
+- name: Create temporary directory for GMP scripts
+  file:
+    path: /tmp/openvas-gmp-scripts
     state: directory
-    suffix: _openvas
-  register: temp_report_dir
-  become: yes
+    mode: '0755'
 
-- name: Export reports to temp directory
-  shell: |
-    TASK_NAME="Scan-{{ item }}-{{ ansible_date_time.date }}"
-    TASK_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                      --gmp-password {{ openvas_admin_password }} \
-                      socket --socketpath /run/gvmd/gvmd.sock \
-                      --xml "<get_tasks filter='name=$TASK_NAME'/>" 2>/dev/null | \
-                      grep -oP 'task id="\K[^"]+' | head -1)
-    
-    REPORT_ID=$(gvm-cli --gmp-username {{ openvas_admin_user }} \
-                        --gmp-password {{ openvas_admin_password }} \
-                        socket --socketpath /run/gvmd/gvmd.sock \
-                        --xml "<get_tasks task_id='$TASK_ID'/>" 2>/dev/null | \
-                        grep -oP 'last_report.*?report id="\K[^"]+' | head -1)
-    
-    REPORT_FILE="{{ temp_report_dir.path }}/report-{{ item }}-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '-') }}.xml"
-    
-    gvm-cli --gmp-username {{ openvas_admin_user }} \
-            --gmp-password {{ openvas_admin_password }} \
-            socket --socketpath /run/gvmd/gvmd.sock \
-            --xml "<get_reports report_id='$REPORT_ID' format_id='a994b278-1f62-11e1-96ac-406186ea4fc5'/>" \
-            > "$REPORT_FILE" 2>/dev/null
-    
-    echo "$REPORT_FILE"
-  loop: "{{ target_ips }}"
-  become: yes
-  no_log: true
-  register: report_export
 
-- name: Copy reports to role directory
+
+- name: Create target creation GMP script
   copy:
-    src: "{{ item }}"
-    dest: "{{ openvas_report_xml_dir }}/"
-    remote_src: yes
-    mode: '0644'
-  with_fileglob:
-    - "{{ temp_report_dir.path }}/report-*.xml"
-  become: yes
-  delegate_to: localhost
+    content: |
+      #!/usr/bin/env python3
+      import sys
+      from gvm.connections import TLSConnection
+      from gvm.protocols.gmp import Gmp
+      from gvm.transforms import EtreeTransform
+      from lxml import etree
+      
+      # Use TLS connection to GMP on port 9390
+      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      transform = EtreeTransform()
+      
+      try:
+          with Gmp(connection=connection, transform=transform) as gmp:
+              gmp.authenticate('{{ openvas_admin_user }}', '{{ openvas_admin_password }}')
+              
+              # Get default port list (OpenVAS Default)
+              print("DEBUG: Getting port lists...", file=sys.stderr)
+              port_lists = gmp.get_port_lists()
+              port_list_id = None
+              
+              for port_list in port_lists.xpath('port_list'):
+                  name = port_list.find('name').text if port_list.find('name') is not None else ''
+                  pl_id = port_list.get('id')
+                  print(f"DEBUG: Found port list: {name} (ID: {pl_id})", file=sys.stderr)
+                  if 'OpenVAS Default' in name or 'All IANA' in name:
+                      port_list_id = pl_id
+                      print(f"DEBUG: Using port list: {name}", file=sys.stderr)
+                      break
+              
+              # Fallback to first port list
+              if not port_list_id:
+                  all_lists = port_lists.xpath('port_list')
+                  if len(all_lists) > 0:
+                      port_list_id = all_lists[0].get('id')
+                      print(f"WARNING: Using first available port list: {port_list_id}", file=sys.stderr)
+                  else:
+                      print("ERROR: No port lists found", file=sys.stderr)
+                      sys.exit(1)
+              
+              # Create target
+              target_name = 'ansible-targets-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(":", "") }}'
+              hosts = '{{ target_ips | join(",") }}'
+              
+              print(f"DEBUG: Creating target '{target_name}' for hosts: {hosts}", file=sys.stderr)
+              
+              response = gmp.create_target(
+                  name=target_name,
+                  hosts=[hosts],
+                  port_list_id=port_list_id,
+                  comment='Created by Ansible on {{ ansible_date_time.iso8601 }}'
+              )
+              
+              # Debug response
+              print(f"DEBUG: Response: {etree.tostring(response, encoding='unicode')}", file=sys.stderr)
+              
+              # Check status
+              status = response.get('status')
+              if status != '201':
+                  status_text = response.get('status_text', 'Unknown error')
+                  print(f"ERROR: Failed to create target. Status: {status}, Message: {status_text}", file=sys.stderr)
+                  sys.exit(1)
+              
+              # Get target ID
+              target_id = response.get('id')
+              
+              if not target_id:
+                  # Try XPath
+                  id_list = response.xpath('//@id')
+                  if id_list:
+                      target_id = id_list[0]
+              
+              if not target_id:
+                  print("ERROR: Target created but no ID found in response", file=sys.stderr)
+                  print(f"Full response:\n{etree.tostring(response, encoding='unicode', pretty_print=True)}", file=sys.stderr)
+                  sys.exit(1)
+              
+              print(target_id)
+      except Exception as e:
+          print(f"ERROR: {e}", file=sys.stderr)
+          import traceback
+          traceback.print_exc(file=sys.stderr)
+          sys.exit(1)
+    dest: /tmp/openvas-gmp-scripts/create_target.py
+    mode: '0755'
 
-- name: Parse reports and generate summary
-  shell: |
-    python3 /usr/local/bin/openvas-parser.py {{ temp_report_dir.path }}/report-*.xml \
-            > {{ temp_report_dir.path }}/summary-{{ ansible_date_time.date }}.txt 2>&1
-  become: yes
-  ignore_errors: yes
-
-- name: Copy summary to role directory
+- name: Create scan task GMP script
   copy:
-    src: "{{ temp_report_dir.path }}/summary-{{ ansible_date_time.date }}.txt"
-    dest: "{{ openvas_report_summary_dir }}/"
-    remote_src: yes
-    mode: '0644'
-  become: yes
-  delegate_to: localhost
-  ignore_errors: yes
+    content: |
+      #!/usr/bin/env python3
+      import sys
+      from gvm.connections import TLSConnection
+      from gvm.protocols.gmp import Gmp
+      from gvm.transforms import EtreeTransform
+      
+      if len(sys.argv) < 2:
+          print("ERROR: Usage: create_task.py <target_id>", file=sys.stderr)
+          sys.exit(1)
+      
+      target_id = sys.argv[1]
+      
+      # Use TLS connection to GMP on port 9390
+      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      transform = EtreeTransform()
+      
+      try:
+          with Gmp(connection=connection, transform=transform) as gmp:
+              gmp.authenticate('{{ openvas_admin_user }}', '{{ openvas_admin_password }}')
+              
+              # Get scan configs
+              configs = gmp.get_scan_configs()
+              config_id = None
 
-- name: Set proper permissions on reports
-  file:
-    path: "{{ openvas_report_dir }}"
-    owner: "{{ openvas_ansible_user }}"
-    group: "{{ openvas_ansible_user }}"
-    recurse: yes
-  delegate_to: localhost
-  become: no
+              # Debug: Print all available configs
+              print("DEBUG: Available scan configs:", file=sys.stderr)
+              for config in configs.xpath('config'):
+                  config_name = config.find('name').text if config.find('name') is not None else 'Unknown'
+                  print(f"  - {config_name} (ID: {config.get('id')})", file=sys.stderr)
+                  if 'Full and fast' in config_name or 'full and fast' in config_name.lower():
+                      config_id = config.get('id')
+                      break
 
-- name: Clean up temp directory
-  file:
-    path: "{{ temp_report_dir.path }}"
-    state: absent
-  become: yes
-  ignore_errors: yes
+              # If not found, try to use first available config
+              if not config_id:
+                  all_configs = configs.xpath('config')
+                  if len(all_configs) > 0:
+                      config_id = all_configs[0].get('id')
+                      print(f"WARNING: Using first available config: {config_id}", file=sys.stderr)
+                  else:
+                      print("ERROR: No scan configs found", file=sys.stderr)
+                      sys.exit(1)
+              
+              # Get scanners
+              scanners = gmp.get_scanners()
+              scanner_id = None
+              
+              print("DEBUG: Available scanners:", file=sys.stderr)
+              for scanner in scanners.xpath('scanner'):
+                  scanner_name = scanner.find('name').text if scanner.find('name') is not None else 'Unknown'
+                  scanner_type = scanner.find('type').text if scanner.find('type') is not None else 'Unknown'
+                  print(f"  - {scanner_name} (Type: {scanner_type}, ID: {scanner.get('id')})", file=sys.stderr)
+                  if scanner_type == '2':  # OpenVAS Scanner
+                      scanner_id = scanner.get('id')
+                      break
+              
+              if not scanner_id:
+                  # Fallback to first scanner
+                  all_scanners = scanners.xpath('scanner')
+                  if len(all_scanners) > 0:
+                      scanner_id = all_scanners[0].get('id')
+                      print(f"WARNING: Using first available scanner: {scanner_id}", file=sys.stderr)
+                  else:
+                      print("ERROR: No scanners found", file=sys.stderr)
+                      sys.exit(1)
+              
+              # Create task
+              task_name = 'ansible-scan-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(":", "") }}'
+              response = gmp.create_task(
+                  name=task_name,
+                  config_id=config_id,
+                  target_id=target_id,
+                  scanner_id=scanner_id,
+                  comment='Automated scan by Ansible on {{ ansible_date_time.iso8601 }}'
+              )
+              
+              task_id = response.get('id')
+              if not task_id:
+                  print("ERROR: Task created but no ID returned", file=sys.stderr)
+                  sys.exit(1)
+              print(task_id)
+      except Exception as e:
+          print(f"ERROR: {e}", file=sys.stderr)
+          import traceback
+          traceback.print_exc(file=sys.stderr)
+          sys.exit(1)
+    dest: /tmp/openvas-gmp-scripts/create_task.py
+    mode: '0755'
 
-- name: Display scan summary
-  shell: cat {{ openvas_report_summary_dir }}/summary-{{ ansible_date_time.date }}.txt
-  register: summary_content
-  delegate_to: localhost
-  ignore_errors: yes
+- name: Create start scan GMP script
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      import sys
+      from gvm.connections import TLSConnection
+      from gvm.protocols.gmp import Gmp
+      from gvm.transforms import EtreeTransform
+      
+      if len(sys.argv) < 2:
+          print("ERROR: Usage: start_scan.py <task_id>", file=sys.stderr)
+          sys.exit(1)
+      
+      task_id = sys.argv[1]
+      
+      # Use TLS connection to GMP on port 9390
+      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      transform = EtreeTransform()
+      
+      try:
+          with Gmp(connection=connection, transform=transform) as gmp:
+              gmp.authenticate('{{ openvas_admin_user }}', '{{ openvas_admin_password }}')
+              
+              response = gmp.start_task(task_id)
+              report_id_list = response.xpath('//report_id/text()')
+              if not report_id_list:
+                  print("ERROR: Scan started but no report ID returned", file=sys.stderr)
+                  sys.exit(1)
+              report_id = report_id_list[0]
+              print(report_id)
+      except Exception as e:
+          print(f"ERROR: {e}", file=sys.stderr)
+          import traceback
+          traceback.print_exc(file=sys.stderr)
+          sys.exit(1)
+    dest: /tmp/openvas-gmp-scripts/start_scan.py
+    mode: '0755'
 
-- name: Show summary
+- name: Create check status GMP script
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      import sys
+      from gvm.connections import TLSConnection
+      from gvm.protocols.gmp import Gmp
+      from gvm.transforms import EtreeTransform
+      
+      if len(sys.argv) < 2:
+          print("ERROR: Usage: check_status.py <task_id>", file=sys.stderr)
+          sys.exit(1)
+      
+      task_id = sys.argv[1]
+      
+      # Use TLS connection to GMP on port 9390
+      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      transform = EtreeTransform()
+      
+      try:
+          with Gmp(connection=connection, transform=transform) as gmp:
+              gmp.authenticate('{{ openvas_admin_user }}', '{{ openvas_admin_password }}')
+              
+              response = gmp.get_task(task_id)
+              status_list = response.xpath('//task/status/text()')
+              progress_list = response.xpath('//task/progress/text()')
+              
+              if not status_list or not progress_list:
+                  print("ERROR: Could not get task status", file=sys.stderr)
+                  sys.exit(1)
+              
+              status = status_list[0]
+              progress = progress_list[0]
+              
+              print(f"{status}|{progress}")
+      except Exception as e:
+          print(f"ERROR: {e}", file=sys.stderr)
+          import traceback
+          traceback.print_exc(file=sys.stderr)
+          sys.exit(1)
+    dest: /tmp/openvas-gmp-scripts/check_status.py
+    mode: '0755'
+
+- name: Create export report GMP script
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      import sys
+      from gvm.connections import TLSConnection
+      from gvm.protocols.gmp import Gmp
+      from gvm.transforms import EtreeTransform
+      from lxml import etree
+      
+      if len(sys.argv) < 2:
+          print("ERROR: Usage: export_report.py <report_id>", file=sys.stderr)
+          sys.exit(1)
+      
+      report_id = sys.argv[1]
+      
+      # Use TLS connection to GMP on port 9390
+      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      transform = EtreeTransform()
+      
+      try:
+          with Gmp(connection=connection, transform=transform) as gmp:
+              gmp.authenticate('{{ openvas_admin_user }}', '{{ openvas_admin_password }}')
+              
+              # XML format ID
+              xml_format_id = 'a994b278-1f62-11e1-96ac-406186ea4fc5'
+              response = gmp.get_report(report_id, report_format_id=xml_format_id)
+              
+              # Output raw XML
+              if hasattr(response, 'tag'):
+                  print(etree.tostring(response, encoding='unicode', pretty_print=True))
+              else:
+                  print(response)
+      except Exception as e:
+          print(f"ERROR: {e}", file=sys.stderr)
+          import traceback
+          traceback.print_exc(file=sys.stderr)
+          sys.exit(1)
+    dest: /tmp/openvas-gmp-scripts/export_report.py
+    mode: '0755'
+
+# Copy scripts into container
+- name: Copy GMP scripts into container
+  shell: docker cp /tmp/openvas-gmp-scripts {{ openvas_container_prefix }}-allinone:/tmp/
+  changed_when: true
+
+- name: Verify scripts copied successfully
+  shell: docker exec {{ openvas_container_prefix }}-allinone ls -la /tmp/openvas-gmp-scripts/
+  register: scripts_list
+  changed_when: false
+
+- name: Display scripts copied
   debug:
-    msg: "{{ summary_content.stdout_lines }}"
-  when: summary_content.rc == 0
+    msg: "✅ GMP scripts copied to container"
 
-- name: Display report locations
+# Execute automated scanning
+- name: Create target in OpenVAS
+  shell: docker exec {{ openvas_container_prefix }}-allinone python3 /tmp/openvas-gmp-scripts/create_target.py
+  register: target_creation
+  changed_when: true
+  failed_when: target_creation.rc != 0
+
+- name: Debug target creation output
   debug:
     msg:
-      - "========================================="
-      - "Scan completed successfully!"
-      - "========================================="
+      - "Return Code: {{ target_creation.rc }}"
+      - "STDOUT: '{{ target_creation.stdout }}'"
+      - "STDERR: '{{ target_creation.stderr }}'"
+
+- name: Set target ID
+  set_fact:
+    target_id: "{{ target_creation.stdout | trim }}"
+
+- name: Display target creation
+  debug:
+    msg: "✅ Target created with ID: {{ target_id }}"
+
+- name: Create scan task in OpenVAS
+  shell: docker exec {{ openvas_container_prefix }}-allinone python3 /tmp/openvas-gmp-scripts/create_task.py {{ target_id }}
+  register: task_creation
+  changed_when: true
+  failed_when: task_creation.rc != 0
+
+- name: Debug task creation output
+  debug:
+    msg:
+      - "Return Code: {{ task_creation.rc }}"
+      - "STDOUT: '{{ task_creation.stdout }}'"
+      - "STDERR: '{{ task_creation.stderr }}'"
+
+- name: Set task ID
+  set_fact:
+    task_id: "{{ task_creation.stdout | trim }}"
+
+- name: Display task creation
+  debug:
+    msg: "✅ Scan task created with ID: {{ task_id }}"
+
+- name: Start scan
+  shell: docker exec {{ openvas_container_prefix }}-allinone python3 /tmp/openvas-gmp-scripts/start_scan.py {{ task_id }}
+  register: scan_start
+  changed_when: true
+  failed_when: scan_start.rc != 0
+
+- name: Set report ID
+  set_fact:
+    report_id: "{{ scan_start.stdout | trim }}"
+
+- name: Display scan started
+  debug:
+    msg:
+      - "╔════════════════════════════════════════╗"
+      - "║   Scan Started Successfully!            ║"
+      - "╚════════════════════════════════════════╝"
+      - "Task ID: {{ task_id }}"
+      - "Report ID: {{ report_id }}"
       - ""
-      - "Reports saved to:"
-      - "  XML: {{ openvas_report_xml_dir }}/"
-      - "  Summary: {{ openvas_report_summary_dir }}/summary-{{ ansible_date_time.date }}.txt"
+      - "⏳ Waiting for scan to complete..."
+      - "   This may take 30-60 minutes"
       - ""
-      - "View commands:"
-      - "  cd {{ openvas_report_dir }}"
-      - "  cat summaries/summary-{{ ansible_date_time.date }}.txt"
-      - "  ls -lh xml/"
+
+# Monitor scan progress
+- name: Monitor scan progress
+  shell: docker exec {{ openvas_container_prefix }}-allinone python3 /tmp/openvas-gmp-scripts/check_status.py {{ task_id }}
+  register: scan_status
+  until: scan_status.stdout.split('|')[0] == 'Done'
+  retries: 240
+  delay: 30
+  changed_when: false
+  failed_when: scan_status.rc != 0
+
+- name: Display scan completion
+  debug:
+    msg:
+      - "✅ Scan completed!"
+      - "Status: {{ scan_status.stdout.split('|')[0] }}"
+      - "Progress: {{ scan_status.stdout.split('|')[1] }}%"
+
+# Export report
+- name: Ensure reports directory exists
+  file:
+    path: "{{ role_path }}/reports/xml"
+    state: directory
+    mode: '0755'
+
+- name: Ensure summaries directory exists
+  file:
+    path: "{{ role_path }}/reports/summaries"
+    state: directory
+    mode: '0755'
+
+- name: Set report filename
+  set_fact:
+    report_filename: "scan-{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '') }}"
+
+- name: Export scan report
+  shell: docker exec {{ openvas_container_prefix }}-allinone python3 /tmp/openvas-gmp-scripts/export_report.py {{ report_id }}
+  register: report_export
+  changed_when: false
+  failed_when: report_export.rc != 0
+
+- name: Save report to file
+  copy:
+    content: "{{ report_export.stdout }}"
+    dest: "{{ role_path }}/reports/xml/{{ report_filename }}.xml"
+    mode: '0644'
+
+- name: Display report saved
+  debug:
+    msg: "✅ XML report saved to: {{ role_path }}/reports/xml/{{ report_filename }}.xml"
+
+# Install and run Python parser
+- name: Copy OpenVAS parser script
+  copy:
+    src: "{{ role_path }}/files/openvas-parser.py"
+    dest: "/tmp/openvas-parser.py"
+    mode: '0755'
+
+- name: Parse report and generate summary
+  shell: python3 /tmp/openvas-parser.py {{ role_path }}/reports/xml/{{ report_filename }}.xml
+  register: parsed_report
+  changed_when: false
+  failed_when: false
+
+- name: Save parsed summary
+  copy:
+    content: "{{ parsed_report.stdout }}"
+    dest: "{{ role_path }}/reports/summaries/{{ report_filename }}-parsed.txt"
+    mode: '0644'
+  when: parsed_report.rc == 0
+
+- name: Display parsed summary
+  debug:
+    msg: "{{ parsed_report.stdout_lines }}"
+  when: parsed_report.rc == 0
+
+- name: Create basic report summary
+  copy:
+    content: |
+      ╔════════════════════════════════════════════════╗
+      ║        OpenVAS Scan Report Summary             ║
+      ╚════════════════════════════════════════════════╝
+      
+      Scan Date: {{ ansible_date_time.iso8601 }}
+      User: HyHonCuTe
+      
+      Target ID: {{ target_id }}
+      Task ID: {{ task_id }}
+      Report ID: {{ report_id }}
+      
+      Scanned Hosts:
+      {% for ip in target_ips %}
+      - {{ ip }}
+      {% endfor %}
+      
+      Report Location:
+      {{ role_path }}/reports/xml/{{ report_filename }}.xml
+      
+      Parsed Summary:
+      {{ role_path }}/reports/summaries/{{ report_filename }}-parsed.txt
+      
+      View in Web UI:
+      http://localhost:{{ openvas_web_port }}
+      
+      Generated by: Ansible OpenVAS Role
+      Repository: HyHonCuTe/ansible
+    dest: "{{ role_path }}/reports/summaries/{{ report_filename }}-summary.txt"
+    mode: '0644'
+
+- name: Display final results
+  debug:
+    msg:
       - ""
-      - "Full path: {{ openvas_report_dir }}"
+      - "╔════════════════════════════════════════╗"
+      - "║   Automated Scan Complete!              ║"
+      - "╚════════════════════════════════════════╝"
+      - ""
+      - "📊 Scan Results:"
+      - "   Target ID: {{ target_id }}"
+      - "   Task ID: {{ task_id }}"
+      - "   Report ID: {{ report_id }}"
+      - ""
+      - "📁 Files generated:"
+      - "   XML Report:     {{ role_path }}/reports/xml/{{ report_filename }}.xml"
+      - "   Parsed Report:  {{ role_path }}/reports/summaries/{{ report_filename }}-parsed.txt"
+      - "   Summary:        {{ role_path }}/reports/summaries/{{ report_filename }}-summary.txt"
+      - ""
+      - "🌐 View in Web UI:"
+      - "   http://localhost:{{ openvas_web_port }}"
+      - ""
+      - "📖 Read parsed report:"
+      - "   cat {{ role_path }}/reports/summaries/{{ report_filename }}-parsed.txt"
+      - ""
+      - "✅ Scan automation completed successfully!"
+      - ""
+
+# Cleanup
+- name: Remove temporary GMP scripts from host
+  file:
+    path: /tmp/openvas-gmp-scripts
+    state: absent
+
+- name: Remove parser script from temp
+  file:
+    path: /tmp/openvas-parser.py
+    state: absent
+
+- name: Remove GMP scripts from container
+  shell: docker exec {{ openvas_container_prefix }}-allinone rm -rf /tmp/openvas-gmp-scripts
+  changed_when: true
+  failed_when: false

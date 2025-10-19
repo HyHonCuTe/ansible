@@ -1,0 +1,73 @@
+# OpenVAS Scan Instructions
+# Created: 2025-10-19 08:49:30 UTC
+# User: HyHonCuTe
+
+## Web UI Access
+URL: http://localhost:9392
+Username: admin
+Password: YourSecurePassword123!
+
+## Targets
+- 192.168.1.69
+
+## Step-by-Step Guide
+
+### 1. Login
+- Open: http://localhost:9392
+- Enter credentials above
+
+### 2. Create Target
+- Menu: Configuration → Targets
+- Click: ⭐ (New Target)
+- Fill:
+  * Name: Linux Servers
+  * Hosts: 192.168.1.69
+  * Port List: OpenVAS Default
+- Save
+
+### 3. Create Task
+- Menu: Scans → Tasks
+- Click: ⭐ (New Task)
+- Fill:
+  * Name: Weekly Vulnerability Scan
+  * Scan Targets: Linux Servers (from dropdown)
+  * Scan Config: Full and fast
+  * Scanner: OpenVAS Default
+- Save
+
+### 4. Start Scan
+- In Tasks list
+- Find: Weekly Vulnerability Scan
+- Click: ▶️ (Start icon)
+- Monitor: Progress bar shows completion
+
+### 5. View Results
+- When Status = Done
+- Menu: Scans → Reports
+- Click on latest report
+- View:
+  * Summary (High/Medium/Low)
+  * Detailed findings
+  * Host details
+
+### 6. Export Report
+- In report view
+- Click: Download icon
+- Format: PDF or XML
+- Save to: /home/server_ansible/Desktop/ansible/roles/openvas/reports/xml/
+
+## Container Commands
+
+# Check status
+sudo docker ps --filter name=openvas
+
+# View logs
+sudo docker logs -f openvas-allinone
+
+# Restart
+cd /opt/openvas && sudo docker compose restart
+
+## Helper
+openvas-helper status
+openvas-helper logs
+/tmp/check-openvas.sh
