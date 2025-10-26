@@ -1,0 +1,78 @@
+---
+# Zabbix Deployment Playbook
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+# - name: "Deploy Zabbix Infrastructure"
+#   hosts: zabbix_server
+#   become: yes
+#   tags:
+#     - zabbix_server
+#     - always
+  
+#   pre_tasks:
+#     - name: "Display deployment start"
+#       debug:
+#         msg: |
+#           ╔════════════════════════════════════════════════╗
+#           ║   🚀 Zabbix Deployment Starting               ║
+#           ║   Server: {{ inventory_hostname }}             ║
+#           ║   Time: {{ ansible_date_time.iso8601 }}        ║
+#           ║   User: HyHonCuTe                              ║
+#           ╚════════════════════════════════════════════════╝
+  
+#   roles:
+#     - role: zabbix
+#       tags:
+#         - zabbix_server
+
+# ==========================================
+# Deploy Zabbix Agents (FIX: Thêm phần này)
+# ==========================================
+- name: "Deploy Zabbix Agents"
+  hosts: zabbix_agents
+  become: yes
+  gather_facts: yes
+  tags:
+    - install_agent
+    - zabbix_agents
+  roles:
+    - role: zabbix
+      tasks_from: install_agent
+
+- name: "Display deployment summary"
+  hosts: zabbix_server
+  become: yes
+  tags:
+    - always
+  
+  tasks:
+    - name: "Get server IP"
+      set_fact:
+        server_ip: "{{ ansible_default_ipv4.address }}"
+    
+    - name: "Display final summary"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════╗
+          ║   ✅ Zabbix Deployment Completed!             ║
+          ╚════════════════════════════════════════════════╝
+          
+          📊 Web Interface:
+             URL: http://{{ server_ip }}/zabbix
+             Username: Admin
+             Password: zabbix
+          
+          🔐 SECURITY CHECKLIST:
+             ☑ Login to Web UI
+             ☑ Change Admin password immediately
+             ☑ Update database passwords in vars
+             ☑ Configure email notifications
+          
+          📡 Deploy agents:
+             ansible-playbook playbooks/deploy-zabbix.yml --tags zabbix_agents
+          
+          📖 Helper commands:
+             sudo zabbix-add-host
+             sudo systemctl status zabbix-server
+             sudo tail -f /var/log/zabbix/zabbix_server.log

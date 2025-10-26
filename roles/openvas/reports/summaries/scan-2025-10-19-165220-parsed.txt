@@ -1,0 +1,34 @@
+====================================================================================================
+[1mOpenVAS Vulnerability Scan Summary Report[0m
+Generated: 2025-10-19 17:52:27
+====================================================================================================
+
+[1mIndividual Report Summaries[0m
+----------------------------------------------------------------------------------------------------
+
+File: scan-2025-10-19-165220.xml
+Host: Unknown
+Scan Period: 2025-10-19T09:58:20Z to 2025-10-19T10:52:02Z
+  [0;31mHigh:[0m      0
+  [1;33mMedium:[0m    0
+  [0;34mLow:[0m       2
+  Log:       8
+
+====================================================================================================
+[1mTOTAL SUMMARY[0m
+====================================================================================================
+[0;31mHigh Severity:  [0m    0
+[1;33mMedium Severity:[0m    0
+[0;34mLow Severity:   [0m    2
+Informational:      8
+Total Findings:    10
+
+[1;33m⚠ Some vulnerabilities found, review recommended[0m
+
+No high or medium severity vulnerabilities found.
+====================================================================================================
+END OF REPORT
+====================================================================================================
+
+For detailed information, review the full XML reports.
+Remediation should be prioritized based on CVSS scores and threat levels.

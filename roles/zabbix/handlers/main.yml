@@ -1,0 +1,28 @@
+---
+# Zabbix handlers
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+- name: daemon-reload
+  systemd:
+    daemon_reload: yes
+
+- name: restart zabbix-server
+  systemd:
+    name: zabbix-server
+    state: restarted
+
+- name: restart zabbix-agent
+  systemd:
+    name: zabbix-agent
+    state: restarted
+
+- name: restart php-fpm
+  systemd:
+    name: php-fpm
+    state: restarted
+
+- name: restart httpd
+  systemd:
+    name: httpd
+    state: restarted

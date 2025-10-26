@@ -1,0 +1,27 @@
+---
+# Configure Zabbix Server
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+- name: "Wait for Zabbix Server to be fully ready"
+  wait_for:
+    port: 10051
+    delay: 3
+    timeout: 60
+
+- name: "Verify Zabbix Server is running"
+  systemd:
+    name: zabbix-server
+  register: zabbix_status
+
+- name: "Check Zabbix Server log for errors"
+  shell: "tail -20 /var/log/zabbix/zabbix_server.log | grep -i error || echo 'No errors found'"
+  register: server_log
+  changed_when: false
+
+- name: "Display server status"
+  debug:
+    msg: |
+      ✅ Zabbix Server Status: {{ zabbix_status.status.ActiveState }}
+      📡 Listening on port: {{ zabbix_server_listen_port }}
+      📊 Log check: {{ server_log.stdout }}

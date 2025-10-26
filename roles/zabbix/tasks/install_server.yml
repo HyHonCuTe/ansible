@@ -1,0 +1,644 @@
+---
+# Install Zabbix Server with all fixes
+# Author: HiepvHo
+# Updated: 2025-10-26 15:51:30 UTC
+
+- name: "Display Zabbix Server installation start"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   📦 Zabbix Server Installation Starting      ║
+      ╚════════════════════════════════════════════════╝
+      
+      Version: Zabbix {{ zabbix_version }}
+      Deployed by: HiepvHo
+      Time: {{ ansible_date_time.iso8601 }}
+
+- name: "Install Zabbix repository"
+  yum:
+    name: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/9/x86_64/zabbix-release-{{ zabbix_release }}.el9.noarch.rpm"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_os_family == "RedHat"
+
+- name: "Clean DNF cache"
+  command: dnf clean all
+  changed_when: false
+
+- name: "Install Zabbix Server packages (disable EPEL to avoid conflicts)"
+  dnf:
+    name:
+      - zabbix-server-mysql
+      - zabbix-web-mysql
+      - zabbix-apache-conf
+      - zabbix-sql-scripts
+      - zabbix-selinux-policy
+      - zabbix-agent
+    state: present
+    disablerepo: epel
+
+- name: "Install MySQL server and Python MySQL library"
+  dnf:
+    name:
+      - mysql-server
+      - python3-PyMySQL
+    state: present
+
+- name: "Start and enable MySQL"
+  systemd:
+    name: mysqld
+    state: started
+    enabled: yes
+
+- name: "Wait for MySQL to be ready"
+  wait_for:
+    port: 3306
+    delay: 5
+    timeout: 60
+
+# ==========================================
+# MySQL Configuration with Binary Logging Fix
+# ==========================================
+
+- name: "Check if MySQL root password is set"
+  shell: mysql -uroot -e "SELECT 1" 2>&1
+  register: mysql_root_check
+  changed_when: false
+  failed_when: false
+
+- name: "Set MySQL root password"
+  shell: |
+    mysql -uroot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';" 2>/dev/null || true
+    mysql -uroot -p'{{ mysql_root_password }}' -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+  when: mysql_root_check.rc == 0
+  no_log: true
+
+- name: "Fix MySQL log_bin_trust_function_creators (prevent ERROR 1419)"
+  shell: |
+    MYSQL_PWD='{{ mysql_root_password }}' mysql -uroot << 'EOSQL'
+    SET GLOBAL log_bin_trust_function_creators = 1;
+    SET PERSIST log_bin_trust_function_creators = 1;
+    EOSQL
+  register: mysql_binlog_fix
+  failed_when: false
+  changed_when: mysql_binlog_fix.rc == 0
+
+- name: "Create MySQL config for log_bin_trust_function_creators"
+  copy:
+    content: |
+      [mysqld]
+      log_bin_trust_function_creators = 1
+    dest: /etc/my.cnf.d/zabbix.cnf
+    owner: root
+    group: root
+    mode: '0644'
+
+# ==========================================
+# Zabbix Database Setup
+# ==========================================
+
+- name: "Check if Zabbix database exists"
+  shell: |
+    MYSQL_PWD='{{ mysql_root_password }}' mysql -uroot -N -s -e "SHOW DATABASES LIKE '{{ zabbix_db_name }}';" 2>/dev/null | grep -c {{ zabbix_db_name }} || echo "0"
+  register: db_exists
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: "Create Zabbix database"
+  mysql_db:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    name: "{{ zabbix_db_name }}"
+    encoding: utf8mb4
+    collation: utf8mb4_bin
+    state: present
+  when: db_exists.stdout | int == 0
+
+- name: "Create Zabbix database user"
+  mysql_user:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    name: "{{ zabbix_db_user }}"
+    password: "{{ zabbix_db_password }}"
+    priv: "{{ zabbix_db_name }}.*:ALL"
+    host: localhost
+    state: present
+  when: db_exists.stdout | int == 0
+
+- name: "Check if schema is already imported"
+  shell: |
+    MYSQL_PWD='{{ mysql_root_password }}' mysql -uroot -N -s -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='{{ zabbix_db_name }}';" 2>/dev/null
+  register: table_count
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: "Import Zabbix database schema (takes 2-3 minutes)"
+  shell: |
+    echo "📦 Importing schema at $(date)..."
+    zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} 2>&1 | tee /tmp/zabbix_schema_import.log
+    echo "✅ Schema import completed at $(date)"
+  args:
+    executable: /bin/bash
+  when: table_count.stdout | default('0') | int < 100
+  async: 300
+  poll: 10
+  register: schema_import
+
+- name: "Check schema import for errors"
+  shell: grep -i "ERROR" /tmp/zabbix_schema_import.log || echo "No errors"
+  register: schema_errors
+  changed_when: false
+  failed_when: false
+  when: schema_import is changed
+
+- name: "Display schema import result"
+  debug:
+    msg: "Schema import errors: {{ schema_errors.stdout | default('None') }}"
+  when: schema_import is changed
+
+# ==========================================
+# FIX: Ensure roles table exists with correct data
+# ==========================================
+
+- name: "Check if role table exists"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} -N -s -e "SHOW TABLES LIKE 'role';" 2>/dev/null | wc -l
+  register: role_table_exists
+  changed_when: false
+
+- name: "Check role table row count"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} -N -s -e "SELECT COUNT(*) FROM role;" 2>/dev/null
+  register: role_count
+  changed_when: false
+  failed_when: false
+  when: role_table_exists.stdout | int == 1
+
+- name: "Insert/Update default roles (CRITICAL for login)"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} << 'EOSQL'
+    -- Only insert if roles are missing (avoid foreign key issues)
+    INSERT IGNORE INTO role (roleid, name, type, readonly) VALUES
+    (1, 'User role', 1, 0),
+    (2, 'Admin role', 2, 0),
+    (3, 'Super admin role', 3, 1);
+    
+    -- Verify
+    SELECT roleid, name, type, readonly FROM role ORDER BY roleid;
+    EOSQL
+  register: role_insert
+  changed_when: true
+  when: role_count.stdout | default('0') | int < 3
+
+- name: "Display roles status"
+  debug:
+    msg: "{{ role_insert.stdout_lines }}"
+  when: role_insert is changed
+
+# ==========================================
+# FIX: Insert Admin user with CORRECT password hash
+# ==========================================
+
+- name: "Check if users table has data"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} -N -s -e "SELECT COUNT(*) FROM users;" 2>/dev/null
+  register: user_count
+  changed_when: false
+  failed_when: false
+
+- name: "Disable foreign key checks and insert Admin user (FIXED)"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} << 'EOSQL'
+    -- Temporarily disable foreign key checks
+    SET FOREIGN_KEY_CHECKS = 0;
+    
+    -- Delete dependent records first
+    DELETE FROM dashboard WHERE userid IN (1, 2);
+    DELETE FROM profiles WHERE userid IN (1, 2);
+    DELETE FROM user_history WHERE userid IN (1, 2);
+    
+    -- Delete existing users
+    DELETE FROM users WHERE username IN ('Admin', 'guest');
+    
+    -- Re-enable foreign key checks
+    SET FOREIGN_KEY_CHECKS = 1;
+    
+    -- Insert Admin user with CORRECT password hash for 'zabbix'
+    -- Password: zabbix
+    -- Hash: $2y$10$L39MxXiSEzM5P.qQ5nWL7u1H.2gQh.KDU6/dNp1t32TJaLKMy6saK
+    INSERT INTO users (
+        userid, username, name, surname, passwd,
+        autologin, autologout, lang, refresh, rows_per_page,
+        theme, attempt_failed, attempt_clock, attempt_ip, roleid
+    ) VALUES (
+        1, 'Admin', 'Zabbix', 'Administrator',
+        '$2y$10$L39MxXiSEzM5P.qQ5nWL7u1H.2gQh.KDU6/dNp1t32TJaLKMy6saK',
+        0, '15m', 'en_US', '30s', 50,
+        'default', 0, 0, '', 3
+    );
+    
+    -- Insert guest user (disabled, no password)
+    INSERT INTO users (
+        userid, username, name, surname, passwd,
+        autologin, autologout, lang, refresh, rows_per_page,
+        theme, attempt_failed, attempt_clock, attempt_ip, roleid
+    ) VALUES (
+        2, 'guest', '', '',
+        '',
+        0, '15m', 'en_US', '30s', 50,
+        'default', 0, 0, '', 1
+    );
+    
+    -- Verify user and role linkage
+    SELECT u.userid, u.username, u.roleid, r.name as role_name, r.type as role_type
+    FROM users u
+    LEFT JOIN role r ON u.roleid = r.roleid
+    ORDER BY u.userid;
+    EOSQL
+  when: user_count.stdout | default('0') | int == 0
+  register: user_insert
+  changed_when: true
+
+- name: "Display user creation result"
+  debug:
+    msg: "{{ user_insert.stdout_lines }}"
+  when: user_insert is changed
+
+# ==========================================
+# CRITICAL: Restart PHP-FPM and Apache after user changes
+# ==========================================
+
+- name: "Restart PHP-FPM to clear cache after user insert"
+  systemd:
+    name: php-fpm
+    state: restarted
+  when: user_insert is changed
+
+- name: "Restart Apache to clear cache after user insert"
+  systemd:
+    name: httpd
+    state: restarted
+  when: user_insert is changed
+
+- name: "Wait for web services to be ready after restart"
+  wait_for:
+    port: 80
+    delay: 3
+    timeout: 30
+  when: user_insert is changed
+
+# ==========================================
+# FIX: Ensure instanceid in config table
+# ==========================================
+
+- name: "Check if config table has data"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} -N -s -e "SELECT COUNT(*) FROM config;" 2>/dev/null
+  register: config_row_count
+  changed_when: false
+  failed_when: false
+
+- name: "Insert/Update config with instanceid"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} << 'EOSQL'
+    SET SESSION SQL_MODE='NO_ENGINE_SUBSTITUTION';
+    
+    -- Insert if not exists
+    INSERT IGNORE INTO config (configid, instanceid)
+    VALUES (1, REPLACE(UUID(), '-', ''));
+    
+    -- Update if NULL or invalid
+    UPDATE config 
+    SET instanceid = REPLACE(UUID(), '-', '')
+    WHERE configid = 1 
+      AND (instanceid IS NULL OR instanceid = '' OR CHAR_LENGTH(instanceid) < 32);
+    
+    -- Verify
+    SELECT configid, CHAR_LENGTH(instanceid) as length, instanceid
+    FROM config WHERE configid = 1;
+    EOSQL
+  register: config_instanceid
+  changed_when: true
+
+- name: "Display instanceid result"
+  debug:
+    msg: "{{ config_instanceid.stdout_lines }}"
+
+- name: "Verify instanceid length"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} -N -s -e "SELECT CHAR_LENGTH(instanceid) FROM config WHERE configid = 1;" 2>/dev/null
+  register: instanceid_length
+  changed_when: false
+
+- name: "Validate instanceid"
+  set_fact:
+    instanceid_is_valid: "{{ (instanceid_length.stdout | default('0') | int) == 32 }}"
+
+- name: "✅ SUCCESS - instanceid configured"
+  debug:
+    msg: |
+      ╔═══════════════════════════════════════════╗
+      ║  ✅ instanceid configured successfully    ║
+      ╚═══════════════════════════════════════════╝
+      
+      Length: {{ instanceid_length.stdout }} characters
+      Valid: {{ instanceid_is_valid }}
+  when: instanceid_is_valid | bool
+
+- name: "❌ FAIL - instanceid validation failed"
+  fail:
+    msg: |
+      ❌ CRITICAL: instanceid validation FAILED!
+      Length: {{ instanceid_length.stdout }}
+      
+      Manual fix:
+      sudo MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} -e "UPDATE config SET instanceid = REPLACE(UUID(), '-', '') WHERE configid = 1;"
+  when: not (instanceid_is_valid | bool)
+
+# ==========================================
+# Verify Database Setup
+# ==========================================
+
+- name: "Comprehensive database verification"
+  shell: |
+    MYSQL_PWD='{{ zabbix_db_password }}' mysql -u{{ zabbix_db_user }} {{ zabbix_db_name }} << 'EOSQL'
+    SELECT 'Tables' as item, COUNT(*) as count FROM information_schema.tables WHERE table_schema='{{ zabbix_db_name }}'
+    UNION ALL SELECT 'Roles', COUNT(*) FROM role
+    UNION ALL SELECT 'Users', COUNT(*) FROM users
+    UNION ALL SELECT 'Config', COUNT(*) FROM config
+    UNION ALL SELECT 'Valid instanceid', COUNT(*) FROM config WHERE CHAR_LENGTH(instanceid) = 32;
+    EOSQL
+  register: db_verify
+  changed_when: false
+
+- name: "Display database verification"
+  debug:
+    msg: "{{ db_verify.stdout_lines }}"
+
+# ==========================================
+# Zabbix Server Configuration
+# ==========================================
+
+- name: "Configure Zabbix Server database connection"
+  lineinfile:
+    path: /etc/zabbix/zabbix_server.conf
+    regexp: "^# ?{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    backup: yes
+  loop:
+    - { key: 'DBName', value: '{{ zabbix_db_name }}' }
+    - { key: 'DBUser', value: '{{ zabbix_db_user }}' }
+    - { key: 'DBPassword', value: '{{ zabbix_db_password }}' }
+  notify: restart zabbix-server
+
+- name: "Ensure DBHost is commented (use localhost socket)"
+  lineinfile:
+    path: /etc/zabbix/zabbix_server.conf
+    regexp: '^DBHost='
+    line: '# DBHost=localhost'
+    backup: yes
+  notify: restart zabbix-server
+
+- name: "Configure PHP timezone"
+  lineinfile:
+    path: /etc/php-fpm.d/zabbix.conf
+    regexp: '^; ?php_value\[date.timezone\]'
+    line: 'php_value[date.timezone] = {{ php_timezone }}'
+  notify: restart php-fpm
+
+# ==========================================
+# Fix Runtime Directories and Permissions
+# ==========================================
+
+- name: "Create /run/zabbix directory"
+  file:
+    path: /run/zabbix
+    state: directory
+    owner: zabbix
+    group: zabbix
+    mode: '0755'
+
+- name: "Create tmpfiles.d config for persistence"
+  copy:
+    content: |
+      d /run/zabbix 0755 zabbix zabbix -
+    dest: /usr/lib/tmpfiles.d/zabbix-server.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: "Apply tmpfiles configuration"
+  command: systemd-tmpfiles --create
+  changed_when: false
+
+- name: "Fix /var/log/zabbix permissions"
+  file:
+    path: /var/log/zabbix
+    state: directory
+    owner: zabbix
+    group: zabbix
+    mode: '0755'
+    recurse: yes
+
+# ==========================================
+# Fix systemd service type
+# ==========================================
+
+- name: "Check systemd service Type"
+  shell: grep "^Type=" /usr/lib/systemd/system/zabbix-server.service || echo "Type=forking"
+  register: service_type
+  changed_when: false
+
+- name: "Fix systemd service Type to forking"
+  lineinfile:
+    path: /usr/lib/systemd/system/zabbix-server.service
+    regexp: '^Type='
+    line: 'Type=forking'
+    backup: yes
+  when: "'notify' in service_type.stdout"
+  notify: daemon-reload
+
+# ==========================================
+# SELinux Configuration
+# ==========================================
+
+- name: "Check if SELinux is enabled"
+  command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+
+- name: "Fix SELinux contexts"
+  command: "restorecon -Rv {{ item }}"
+  loop:
+    - /etc/zabbix
+    - /var/log/zabbix
+    - /run/zabbix
+  when: 
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != "Disabled"
+  ignore_errors: yes
+
+# ==========================================
+# Start Services
+# ==========================================
+
+- name: "Start and enable PHP-FPM"
+  systemd:
+    name: php-fpm
+    state: started
+    enabled: yes
+
+- name: "Start and enable Apache"
+  systemd:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: "Start and enable Zabbix Server"
+  systemd:
+    name: zabbix-server
+    state: started
+    enabled: yes
+  register: zabbix_start
+  failed_when: false
+
+- name: "Check Zabbix Server startup errors"
+  shell: tail -50 /var/log/zabbix/zabbix_server.log | grep -i "error\|fail\|cannot" || echo "No errors found"
+  register: zabbix_errors
+  when: zabbix_start.failed | default(false)
+  changed_when: false
+
+- name: "Display startup errors if any"
+  debug:
+    msg: "⚠️ Zabbix Server startup errors:\n{{ zabbix_errors.stdout }}"
+  when: zabbix_start.failed | default(false)
+
+- name: "Retry Zabbix Server start after 5 seconds"
+  systemd:
+    name: zabbix-server
+    state: restarted
+  when: zabbix_start.failed | default(false)
+  delay: 5
+
+# ==========================================
+# Firewall Configuration
+# ==========================================
+
+- name: "Check if firewalld is running"
+  systemd:
+    name: firewalld
+  register: firewalld_status
+  ignore_errors: yes
+
+- name: "Configure firewall for HTTP/HTTPS"
+  firewalld:
+    service: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    - http
+    - https
+  when: 
+    - configure_firewall | bool
+    - firewalld_status.status.ActiveState == "active"
+  ignore_errors: yes
+
+- name: "Configure firewall for Zabbix ports"
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    - 10051/tcp
+    - 10050/tcp
+  when: 
+    - configure_firewall | bool
+    - firewalld_status.status.ActiveState == "active"
+  ignore_errors: yes
+
+# ==========================================
+# Final Verification
+# ==========================================
+
+- name: "Wait for Zabbix Server to start"
+  wait_for:
+    port: 10051
+    delay: 5
+    timeout: 60
+  ignore_errors: yes
+  register: port_check
+
+- name: "Check Zabbix Server status"
+  systemd:
+    name: zabbix-server
+  register: zabbix_service
+
+- name: "Get final statistics"
+  shell: |
+    echo "Service: $(systemctl is-active zabbix-server)"
+    echo "Process: $(ps aux | grep -c '[z]abbix_server')"
+    echo "Port: $(ss -tlnp | grep ':10051' | wc -l)"
+  register: final_stats
+  changed_when: false
+
+- name: "Check for instanceid in log"
+  shell: |
+    tail -20 /var/log/zabbix/zabbix_server.log | grep -i "instance" || echo "✅ No instanceid errors"
+  register: instanceid_log_check
+  changed_when: false
+
+- name: "Get Zabbix Server version"
+  shell: zabbix_server -V | head -1
+  register: server_version
+  changed_when: false
+  failed_when: false
+
+- name: "Display installation summary"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   ✅ Zabbix Server Installation Complete      ║
+      ╚════════════════════════════════════════════════╝
+      
+      📦 Version: {{ server_version.stdout | default('Zabbix ' + zabbix_version) }}
+      👤 Deployed by: HiepvHo
+      📅 Date: {{ ansible_date_time.iso8601 }}
+      
+      🗄️  Database:
+         {{ db_verify.stdout_lines | join('\n         ') }}
+      
+      🌐 Service:
+        {{ final_stats.stdout | indent(9, true) }}
+      
+      📋 InstanceID Status:
+        {{ instanceid_log_check.stdout }}
+      
+      🔗 Web UI:
+         URL: http://{{ ansible_default_ipv4.address }}/zabbix
+         👤 Username: Admin
+         🔑 Password: zabbix
+      
+      🔐 SECURITY: Change password after first login!
+      
+      {% if port_check.failed | default(false) %}
+      ⚠️  WARNING: Port 10051 not responding. Check logs:
+         sudo tail -50 /var/log/zabbix/zabbix_server.log
+         sudo systemctl status zabbix-server
+      {% endif %}
+
+- name: "FAIL if Zabbix Server is not running"
+  fail:
+    msg: |
+      ❌ CRITICAL: Zabbix Server is not running!
+      
+      Status: {{ zabbix_service.status.ActiveState }}
+      
+      🔧 Debug:
+      sudo systemctl status zabbix-server -l
+      sudo tail -100 /var/log/zabbix/zabbix_server.log
+  when: zabbix_service.status.ActiveState != "active"

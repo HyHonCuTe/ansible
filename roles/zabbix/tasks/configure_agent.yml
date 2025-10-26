@@ -1,0 +1,37 @@
+---
+# Configure Zabbix Agent
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+- name: "Configure Zabbix Agent"
+  lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: "^# ?{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    backup: yes
+  loop:
+    - { key: 'Server', value: '{{ zabbix_agent_server }}' }
+    - { key: 'ServerActive', value: '{{ zabbix_agent_server_active }}' }
+    - { key: 'Hostname', value: '{{ zabbix_agent_hostname }}' }
+    - { key: 'ListenPort', value: '{{ zabbix_agent_listen_port }}' }
+  notify: restart zabbix-agent
+
+- name: "Start and enable Zabbix Agent"
+  systemd:
+    name: zabbix-agent
+    state: started
+    enabled: yes
+
+- name: "Verify Zabbix Agent is running"
+  wait_for:
+    port: "{{ zabbix_agent_listen_port }}"
+    delay: 2
+    timeout: 10
+
+- name: "Display agent info"
+  debug:
+    msg: |
+      ✅ Zabbix Agent configured successfully!
+      📡 Hostname: {{ zabbix_agent_hostname }}
+      🌐 Server IP: {{ zabbix_agent_server }}
+      📍 Listen Port: {{ zabbix_agent_listen_port }}

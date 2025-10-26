@@ -1,0 +1,40 @@
+---
+# Zabbix deployment variables
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+# Zabbix version
+zabbix_version: "6.4"
+zabbix_release: "6.4-1"
+
+# MySQL root password
+mysql_root_password: "MySQL@2025"
+
+# Zabbix Server settings
+zabbix_server_name: "Zabbix Monitoring Server"
+zabbix_server_listen_port: 10051
+
+# Database settings
+zabbix_db_name: zabbix
+zabbix_db_user: zabbix
+zabbix_db_password: "ZabbixDB@2025"
+
+# Web interface
+zabbix_web_user: Admin
+zabbix_web_password: zabbix
+
+# Zabbix Agent settings
+zabbix_agent_hostname: "{{ ansible_hostname }}"
+zabbix_agent_listen_port: 10050
+zabbix_agent_server: "{{ hostvars['zabbix-server']['ansible_default_ipv4']['address'] | default('127.0.0.1') }}"
+zabbix_agent_server_active: "{{ hostvars['zabbix-server']['ansible_default_ipv4']['address'] | default('127.0.0.1') }}"
+
+
+zabbix_agent_server: "{{ groups['zabbix_server'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | first | default('192.168.1.125') }}"
+zabbix_agent_server_active: "{{ groups['zabbix_server'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | first | default('192.168.1.125') }}"
+
+# Timezone
+php_timezone: "Asia/Ho_Chi_Minh"
+
+# Firewall
+configure_firewall: true

@@ -1,0 +1,38 @@
+---
+# Setup monitoring configuration
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+- name: "Wait for Web UI to be available"
+  uri:
+    url: "http://localhost/zabbix"
+    status_code: 200
+    timeout: 10
+  register: web_check
+  until: web_check.status == 200
+  retries: 12
+  delay: 5
+
+- name: "Create helper script for adding hosts"
+  template:
+    src: add_host_helper.sh.j2
+    dest: /usr/local/bin/zabbix-add-host
+    mode: '0755'
+
+- name: "Display monitoring setup info"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   Monitoring Setup Complete                    ║
+      ╚════════════════════════════════════════════════╝
+      
+      📊 Web Interface: http://{{ ansible_default_ipv4.address }}/zabbix
+      👤 Username: Admin
+      🔐 Password: zabbix (CHANGE THIS!)
+      
+      📖 Helper script: sudo zabbix-add-host
+      
+      📡 Next steps:
+         1. Login to Web UI
+         2. Change Admin password
+         3. Add agents: ansible-playbook playbooks/deploy-zabbix.yml --tags zabbix_agents
