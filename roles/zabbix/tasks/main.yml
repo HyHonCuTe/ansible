@@ -52,3 +52,10 @@
   tags:
     - zabbix_agents
     - configure
+
+- name: "Include add host to Zabbix Server"
+  include_tasks: add_host.yml
+  when: "'zabbix_agents' in group_names"
+  tags:
+    - add_host
+    - zabbix_agents

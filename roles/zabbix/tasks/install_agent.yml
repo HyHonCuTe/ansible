@@ -1,7 +1,7 @@
 ---
 # Install and Configure Zabbix Agent
 # Author: HiepvHo
-# Updated: 2025-10-26 16:29:21 UTC
+# Updated: 2025-10-28 15:10:00 UTC
 
 - name: "Display Zabbix Agent installation start"
   debug:
@@ -109,12 +109,6 @@
       Hostname={{ zabbix_agent_hostname }}
       ListenPort={{ zabbix_agent_listen_port }}
       
-      # TLS settings (optional)
-      # TLSConnect=psk
-      # TLSAccept=psk
-      # TLSPSKIdentity={{ zabbix_agent_hostname }}
-      # TLSPSKFile=/etc/zabbix/zabbix_agentd.psk
-      
       # Plugins
       Plugins.SystemRun.LogRemoteCommands=0
       {% else %}
@@ -216,6 +210,44 @@
     create: yes
 
 # ==========================================
+# FIX: Copy config to /etc/zabbix_agentd.conf (if service uses this path)
+# ==========================================
+
+- name: "Check what config file systemd service uses"
+  shell: |
+    grep -E "ExecStart.*-c" /usr/lib/systemd/system/{{ zabbix_agent_service }}.service || echo "NO_CONFIG_FLAG"
+  register: service_config_check
+  changed_when: false
+  failed_when: false
+
+- name: "Display service config check"
+  debug:
+    msg: "Service config usage: {{ service_config_check.stdout }}"
+
+- name: "Check if /etc/zabbix_agentd.conf exists (wrong location)"
+  stat:
+    path: /etc/zabbix_agentd.conf
+  register: wrong_config_exists
+
+- name: "Copy correct config to /etc/zabbix_agentd.conf (if agent uses this)"
+  copy:
+    src: "{{ zabbix_agent_config }}"
+    dest: /etc/zabbix_agentd.conf
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0644'
+  when: wrong_config_exists.stat.exists or 'NO_CONFIG_FLAG' in service_config_check.stdout
+
+- name: "Update systemd service to use correct config file"
+  lineinfile:
+    path: /usr/lib/systemd/system/{{ zabbix_agent_service }}.service
+    regexp: '^ExecStart='
+    line: 'ExecStart=/usr/sbin/{{ zabbix_agent_binary }} -c {{ zabbix_agent_config }} -f'
+    backup: yes
+  register: service_file_updated
+
+# ==========================================
 # Fix Permissions and Directories
 # ==========================================
 
@@ -287,6 +319,7 @@
   command: "restorecon -Rv {{ item }}"
   loop:
     - /etc/zabbix
+    - /etc/zabbix_agentd.conf
     - /var/log/zabbix
     - /run/zabbix
   when: 
@@ -316,19 +349,24 @@
     - firewalld_status.status.ActiveState == "active"
   ignore_errors: yes
 
-- name: "Display firewall status"
-  debug:
-    msg: |
-      Firewalld: {{ firewalld_status.status.ActiveState | default('Not found') }}
-      Port {{ zabbix_agent_listen_port }}/tcp: {{ 'Configured' if configure_firewall and firewalld_status.status.ActiveState == 'active' else 'Skipped' }}
-
 # ==========================================
 # Start and Enable Zabbix Agent
 # ==========================================
 
-- name: "Reload systemd daemon"
+- name: "Reload systemd daemon (if service file changed)"
   systemd:
     daemon_reload: yes
+  when: service_file_updated is changed
+
+- name: "Stop agent before restart"
+  systemd:
+    name: "{{ zabbix_agent_service }}"
+    state: stopped
+
+- name: "Test config file before starting"
+  shell: "{{ zabbix_agent_binary }} -c {{ zabbix_agent_config }} -t agent.ping"
+  register: config_test
+  changed_when: false
 
 - name: "Start and enable Zabbix Agent"
   systemd:
@@ -336,45 +374,11 @@
     state: started
     enabled: yes
   register: agent_start
-  failed_when: false
 
-- name: "Check agent startup errors in log"
-  shell: |
-    if [ -f {{ zabbix_agent_log }} ]; then
-      tail -20 {{ zabbix_agent_log }} | grep -iE "error|fail|cannot" || echo "No errors"
-    else
-      echo "Log file not created yet"
-    fi
-  register: agent_errors
-  when: agent_start.failed | default(false)
-  changed_when: false
-
-- name: "Display startup errors"
-  debug:
-    msg: "{{ agent_errors.stdout_lines }}"
-  when: agent_start.failed | default(false)
-
-- name: "Retry agent start with explicit config"
-  shell: "{{ zabbix_agent_binary }} -c {{ zabbix_agent_config }}"
-  when: agent_start.failed | default(false)
-  ignore_errors: yes
-  register: manual_start
-
-- name: "Restart agent service after manual start"
-  systemd:
-    name: "{{ zabbix_agent_service }}"
-    state: restarted
-  when: agent_start.failed | default(false) and manual_start.rc == 0
-  delay: 3
-
-- name: "Wait for Zabbix Agent to be ready"
+- name: "Wait for agent to fully start"
   wait_for:
-    host: "0.0.0.0"
-    port: "{{ zabbix_agent_listen_port }}"
-    delay: 2
-    timeout: 30
-  ignore_errors: yes
-  register: port_wait
+    timeout: 5
+  delegate_to: localhost
 
 - name: "Check Zabbix Agent final status"
   systemd:
@@ -390,26 +394,38 @@
 # Verification
 # ==========================================
 
+- name: "Verify config file being used"
+  shell: |
+    ps aux | grep {{ zabbix_agent_binary }} | grep -v grep | grep -o "configuration file: [^ ]*" || echo "Config not shown in process"
+  register: actual_config_check
+  changed_when: false
+
 - name: "Verify Zabbix Agent configuration"
   shell: |
     echo "Service: {{ zabbix_agent_service }}"
-    echo "Config: {{ zabbix_agent_config }}"
-    echo "Binary: {{ zabbix_agent_binary }}"
+    echo "Expected config: {{ zabbix_agent_config }}"
+    echo "Actual config: {{ actual_config_check.stdout }}"
     echo "Listening: $(ss -tlnp | grep {{ zabbix_agent_listen_port }} | wc -l) port(s)"
     echo "Processes: $(ps aux | grep -E '{{ zabbix_agent_binary }}' | grep -v grep | wc -l)"
-    echo "Log file: $(ls -lh {{ zabbix_agent_log }} 2>/dev/null || echo 'Not created')"
   register: agent_verify
   changed_when: false
 
-- name: "Check Zabbix Agent logs for errors"
+- name: "Check log for connection to correct server"
   shell: |
     if [ -f {{ zabbix_agent_log }} ]; then
-      tail -15 {{ zabbix_agent_log }} | grep -iE "error|fail" || echo "✅ No errors in log"
-    else
-      echo "⚠️ Log file not created yet"
+      sleep 3
+      tail -30 {{ zabbix_agent_log }} | grep -E "192.168.1.125|127.0.0.1" | tail -5
     fi
-  register: agent_log_check
+  register: connection_check
   changed_when: false
+  failed_when: false
+
+- name: "Check for 127.0.0.1 errors"
+  shell: |
+    tail -30 {{ zabbix_agent_log }} | grep "127.0.0.1" >/dev/null && echo "❌ ERROR: Connecting to 127.0.0.1" || echo "✅ OK: No 127.0.0.1 connections"
+  register: localhost_check
+  changed_when: false
+  failed_when: false
 
 - name: "Test agent connectivity to server"
   shell: |
@@ -429,12 +445,11 @@
       ║   ✅ Zabbix Agent Installation Complete       ║
       ╚════════════════════════════════════════════════╝
       
-      📦 Version:
-         {{ agent_version.stdout }}
+      📦 Version: {{ agent_version.stdout }}
       
       🖥️  Host Information:
          Hostname: {{ zabbix_agent_hostname }}
-         IP Address: {{ ansible_default_ipv4.address }}
+         IP: {{ ansible_default_ipv4.address }}
          Listen Port: {{ zabbix_agent_listen_port }}
       
       🔗 Server Configuration:
@@ -445,63 +460,31 @@
          Status: {{ agent_status.status.ActiveState }}
          Service: {{ zabbix_agent_service }}
          Config: {{ zabbix_agent_config }}
-         Binary: {{ zabbix_agent_binary }}
       
       📊 Verification:
         {{ agent_verify.stdout | indent(9, true) }}
       
-      📋 Log Check:
-        {{ agent_log_check.stdout }}
+      🔌 Connection Check:
+        {{ localhost_check.stdout }}
+        {{ connection_check.stdout | default('No log entries') }}
       
-      🔌 Server Connectivity:
+      🌍 Server Connectivity:
         {{ server_connectivity.stdout }}
       
       ✅ Next Steps:
-         1. Login to Zabbix UI: http://{{ zabbix_agent_server }}/zabbix
-         2. Go to Configuration → Hosts → Create host
-         3. Set:
-            - Host name: {{ zabbix_agent_hostname }}
-            - Groups: Linux servers
-            - Interfaces: Agent
-              - IP: {{ ansible_default_ipv4.address }}
-              - Port: {{ zabbix_agent_listen_port }}
-         4. Link templates: Template OS Linux by Zabbix agent
-         5. Click Add
-         6. Wait 1-2 minutes for data collection
-      
-      {% if port_wait.failed | default(false) %}
-      ⚠️  WARNING: Port {{ zabbix_agent_listen_port }} not responding
-         Check: sudo ss -tlnp | grep {{ zabbix_agent_listen_port }}
-         Logs: sudo tail -50 {{ zabbix_agent_log }}
-      {% endif %}
+         1. Login: http://{{ zabbix_agent_server }}/zabbix
+         2. Configuration → Hosts → Create host
+         3. Host name: {{ zabbix_agent_hostname }}
+         4. IP: {{ ansible_default_ipv4.address }}:{{ zabbix_agent_listen_port }}
+         5. Link template: Template OS Linux by Zabbix agent
 
 - name: "FAIL if agent is not running"
   fail:
     msg: |
       ❌ CRITICAL: Zabbix Agent is not running!
-      
       Status: {{ agent_status.status.ActiveState }}
-      Service: {{ zabbix_agent_service }}
-      Config: {{ zabbix_agent_config }}
       
-      🔧 Debug Commands:
-      
-      1. Check service status:
-         sudo systemctl status {{ zabbix_agent_service }} -l
-      
-      2. Check logs:
-         sudo tail -50 {{ zabbix_agent_log }}
-      
-      3. Test config:
-         sudo {{ zabbix_agent_binary }} -c {{ zabbix_agent_config }} -t agent.ping
-      
-      4. Check listening port:
-         sudo ss -tlnp | grep {{ zabbix_agent_listen_port }}
-      
-      5. Test connectivity to server:
-         ping -c 3 {{ zabbix_agent_server }}
-         telnet {{ zabbix_agent_server }} 10051
-      
-      6. Manual start:
-         sudo {{ zabbix_agent_binary }} -c {{ zabbix_agent_config }} -f
+      Debug:
+      sudo systemctl status {{ zabbix_agent_service }} -l
+      sudo tail -50 {{ zabbix_agent_log }}
   when: agent_status.status.ActiveState != "active"

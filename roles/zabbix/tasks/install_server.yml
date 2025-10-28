@@ -34,6 +34,7 @@
       - zabbix-sql-scripts
       - zabbix-selinux-policy
       - zabbix-agent
+      - zabbix-get
     state: present
     disablerepo: epel
 

@@ -26,19 +26,34 @@
 #       tags:
 #         - zabbix_server
 
+# # ==========================================
+# # Deploy Zabbix Agents (FIX: Thêm phần này)
+# # ==========================================
+# - name: "Deploy Zabbix Agents"
+#   hosts: zabbix_agents
+#   become: yes
+#   gather_facts: yes
+#   tags:
+#     - install_agent
+#     - zabbix_agents
+#   roles:
+#     - role: zabbix
+#       tasks_from: install_agent
+  
 # ==========================================
-# Deploy Zabbix Agents (FIX: Thêm phần này)
+# Add Zabbix Agent Hosts to Server
 # ==========================================
-- name: "Deploy Zabbix Agents"
+- name: "Add agent hosts to Zabbix Server"
   hosts: zabbix_agents
-  become: yes
   gather_facts: yes
   tags:
-    - install_agent
+    - add_host
     - zabbix_agents
-  roles:
-    - role: zabbix
-      tasks_from: install_agent
+  tasks:
+    - name: "Include add host tasks"
+      include_role:
+        name: zabbix
+        tasks_from: add_host
 
 - name: "Display deployment summary"
   hosts: zabbix_server

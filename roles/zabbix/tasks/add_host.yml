@@ -1,0 +1,270 @@
+---
+# Add Zabbix Agent Host to Server via API
+# Author: HiepvHo
+# Date: 2025-10-28 15:36:18 UTC
+
+- name: "Set host variables for localhost delegation"
+  set_fact:
+    agent_hostname: "{{ ansible_hostname | default(inventory_hostname) }}"
+    agent_ip: "{{ ansible_default_ipv4.address | default(ansible_host) }}"
+  
+- name: "Display host info to be added"
+  debug:
+    msg: |
+      Preparing to add host:
+      Hostname: {{ agent_hostname }}
+      IP: {{ agent_ip }}
+      Server: {{ zabbix_agent_server }}
+
+- name: "Install required Python libraries on control node"
+  pip:
+    name:
+      - requests
+    state: present
+  delegate_to: localhost
+  run_once: true
+  become: no
+
+- name: "Get Zabbix Server API token"
+  uri:
+    url: "http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json-rpc"
+    body:
+      jsonrpc: "2.0"
+      method: "user.login"
+      params:
+        username: "Admin"
+        password: "zabbix"
+      id: 1
+    status_code: 200
+    return_content: yes
+  register: zabbix_auth
+  delegate_to: localhost
+  run_once: true
+  failed_when: zabbix_auth.json.error is defined
+
+- name: "Display auth result"
+  debug:
+    msg: "✅ Authenticated, Token: {{ zabbix_auth.json.result[:16] }}..."
+  run_once: true
+
+- name: "Fail if authentication failed"
+  fail:
+    msg: |
+      ❌ Zabbix API authentication failed!
+      Error: {{ zabbix_auth.json.error | default('Unknown error') }}
+  when: zabbix_auth.json.error is defined
+
+- name: "Check if host already exists"
+  uri:
+    url: "http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json-rpc"
+    body:
+      jsonrpc: "2.0"
+      method: "host.get"
+      params:
+        filter:
+          host:
+            - "{{ agent_hostname }}"
+      auth: "{{ zabbix_auth.json.result }}"
+      id: 2
+    status_code: 200
+    return_content: yes
+  register: existing_host
+  delegate_to: localhost
+  failed_when: existing_host.json.error is defined
+
+- name: "Display host check result"
+  debug:
+    msg: "Host {{ agent_hostname }}: {{ 'Already exists' if existing_host.json.result | length > 0 else 'Will be created' }}"
+
+- name: "Get Linux servers group ID"
+  uri:
+    url: "http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json-rpc"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.get"
+      params:
+        filter:
+          name:
+            - "Linux servers"
+      auth: "{{ zabbix_auth.json.result }}"
+      id: 3
+    status_code: 200
+    return_content: yes
+  register: hostgroup
+  delegate_to: localhost
+  run_once: true
+  failed_when: hostgroup.json.error is defined or hostgroup.json.result | length == 0
+
+- name: "Display hostgroup result"
+  debug:
+    msg: "Hostgroup: {{ hostgroup.json.result[0].name }} (ID: {{ hostgroup.json.result[0].groupid }})"
+  run_once: true
+
+- name: "Try multiple template names"
+  uri:
+    url: "http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json-rpc"
+    body:
+      jsonrpc: "2.0"
+      method: "template.get"
+      params:
+        filter:
+          host:
+            - "{{ item }}"
+      auth: "{{ zabbix_auth.json.result }}"
+      id: 4
+    status_code: 200
+    return_content: yes
+  register: template_check
+  delegate_to: localhost
+  run_once: true
+  loop:
+    - "Linux by Zabbix agent"
+    - "Template OS Linux by Zabbix agent"
+    - "Linux by Zabbix agent active"
+  failed_when: false
+
+- name: "Set template variable from successful response"
+  set_fact:
+    template_found: "{{ item }}"
+  loop: "{{ template_check.results }}"
+  when: 
+    - item.json.result is defined
+    - item.json.result | length > 0
+  run_once: true
+
+- name: "Display template result"
+  debug:
+    msg: "Template: {{ template_found.json.result[0].host }} (ID: {{ template_found.json.result[0].templateid }})"
+  when: template_found is defined
+  run_once: true
+
+- name: "Fail if template not found"
+  fail:
+    msg: |
+      ❌ No Linux template found!
+      
+      Manual fix - List all templates:
+      curl -X POST http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php \
+        -H "Content-Type: application/json-rpc" \
+        -d '{"jsonrpc":"2.0","method":"template.get","params":{"output":["host","name"]},"auth":"{{ zabbix_auth.json.result }}","id":1}' | jq
+  when: template_found is not defined
+
+- name: "Create host in Zabbix Server"
+  uri:
+    url: "http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json-rpc"
+    body:
+      jsonrpc: "2.0"
+      method: "host.create"
+      params:
+        host: "{{ agent_hostname }}"
+        interfaces:
+          - type: 1
+            main: 1
+            useip: 1
+            ip: "{{ agent_ip }}"
+            dns: ""
+            port: "{{ zabbix_agent_listen_port }}"
+        groups:
+          - groupid: "{{ hostgroup.json.result[0].groupid }}"
+        templates:
+          - templateid: "{{ template_found.json.result[0].templateid }}"
+      auth: "{{ zabbix_auth.json.result }}"
+      id: 5
+    status_code: 200
+    return_content: yes
+  register: create_host
+  delegate_to: localhost
+  when: existing_host.json.result | length == 0
+  failed_when: create_host.json.error is defined
+
+- name: "Display host creation result"
+  debug:
+    msg: |
+      ✅ Host created successfully!
+      Host ID: {{ create_host.json.result.hostids[0] }}
+      Hostname: {{ agent_hostname }}
+      IP: {{ agent_ip }}
+  when: create_host is changed and create_host.json.result is defined
+
+- name: "Skip host creation (already exists)"
+  debug:
+    msg: |
+      ⚠️ Host {{ agent_hostname }} already exists (ID: {{ existing_host.json.result[0].hostid }})
+  when: existing_host.json.result | length > 0
+
+- name: "Wait for agent to connect"
+  wait_for:
+    timeout: 10
+  delegate_to: localhost
+
+- name: "Verify host status in Zabbix"
+  uri:
+    url: "http://{{ zabbix_agent_server }}/zabbix/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json-rpc"
+    body:
+      jsonrpc: "2.0"
+      method: "host.get"
+      params:
+        filter:
+          host:
+            - "{{ agent_hostname }}"
+        selectInterfaces:
+          - interfaceid
+          - ip
+        output:
+          - hostid
+          - host
+          - status
+          - available
+      auth: "{{ zabbix_auth.json.result }}"
+      id: 6
+    status_code: 200
+    return_content: yes
+  register: host_status
+  delegate_to: localhost
+  failed_when: host_status.json.result | length == 0
+
+- name: "Display host status"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   ✅ Host Added to Zabbix Server              ║
+      ╚════════════════════════════════════════════════╝
+      
+      🖥️  Host Information:
+         Hostname: {{ host_status.json.result[0].host }}
+         Host ID: {{ host_status.json.result[0].hostid }}
+         IP: {{ host_status.json.result[0].interfaces[0].ip }}
+         Status: {{ 'Enabled ✅' if host_status.json.result[0].status == '0' else 'Disabled ❌' }}
+         Availability: {{ 'Available ✅' if host_status.json.result[0].available | default('0') == '1' else 'Checking ⚠️ (wait 1-2 min)' }}
+      
+      🔗 Web UI: http://{{ zabbix_agent_server }}/zabbix/zabbix.php?action=host.view
+      
+      ✅ Next Steps:
+         1. Wait 1-2 minutes for data collection
+         2. Check: Monitoring → Hosts
+         3. Verify ZBX icon is green
+         4. View data: Monitoring → Latest data → Select host: {{ host_status.json.result[0].host }}
