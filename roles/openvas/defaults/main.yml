@@ -9,8 +9,8 @@
 openvas_install_method: "docker"
 
 # Admin Account
-openvas_admin_user: "admin"
-openvas_admin_password: "SecurePass@2025!"
+# openvas_admin_user: "admin"
+# openvas_admin_password: "SecurePass@2025!"
 
 # Installation Settings
 openvas_version: "22.4"

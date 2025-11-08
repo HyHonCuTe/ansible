@@ -1,0 +1,70 @@
+---
+# Prometheus Role - Main Tasks
+# Author: hyhoncute
+# Date: 2025-11-08 17:05:26 UTC
+
+- name: "Display Prometheus deployment info"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   🔥 Prometheus Deployment Starting           ║
+      ╚════════════════════════════════════════════════╝
+      
+      Host: {{ ansible_hostname }}
+      IP: {{ ansible_default_ipv4.address }}
+      Prometheus Version: {{ prometheus_version }}
+      Node Exporter: {{ install_node_exporter }}
+      Alertmanager: {{ install_alertmanager }}
+      Time: {{ ansible_date_time.iso8601 }}
+
+- name: "Include Prometheus installation"
+  include_tasks: install.yml
+  tags:
+    - prometheus
+    - install
+
+- name: "Include Prometheus configuration"
+  include_tasks: configure.yml
+  tags:
+    - prometheus
+    - configure
+
+- name: "Include Node Exporter setup"
+  include_tasks: node_exporter.yml
+  when: install_node_exporter | bool
+  tags:
+    - node_exporter
+    - exporters
+
+- name: "Include Alertmanager setup"
+  include_tasks: alertmanager.yml
+  when: install_alertmanager | bool
+  tags:
+    - alertmanager
+    - alerts
+
+- name: "Display deployment summary"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   ✅ Prometheus Deployment Complete           ║
+      ╚════════════════════════════════════════════════╝
+      
+      📊 Prometheus:
+         URL: http://{{ ansible_default_ipv4.address }}:9090
+         Data: {{ prometheus_data_dir }}
+         Config: {{ prometheus_config_dir }}/prometheus.yml
+      
+      📈 Node Exporter:
+         URL: http://{{ ansible_default_ipv4.address }}:9100/metrics
+         Status: {{ 'Installed' if install_node_exporter else 'Skipped' }}
+      
+      🔔 Alertmanager:
+         URL: http://{{ ansible_default_ipv4.address }}:9093
+         Status: {{ 'Installed' if install_alertmanager else 'Skipped' }}
+      
+      ✅ Next Steps:
+         1. Open Prometheus UI: http://{{ ansible_default_ipv4.address }}:9090
+         2. Check targets: Status → Targets
+         3. Query metrics: Graph → Execute
+         4. Setup alerts in {{ prometheus_config_dir }}/alerts.yml

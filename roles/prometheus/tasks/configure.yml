@@ -1,0 +1,96 @@
+---
+# Prometheus Configuration Tasks
+# Author: hyhoncute
+# Date: 2025-11-08 17:30:24 UTC
+
+- name: "Create Prometheus configuration"
+  template:
+    src: prometheus.yml.j2
+    dest: "{{ prometheus_config_dir }}/prometheus.yml"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0644'
+    validate: "{{ prometheus_install_dir }}/promtool check config %s"
+  notify: restart prometheus
+
+- name: "Create alerts rules file"
+  copy:
+    src: alerts.yml
+    dest: "{{ prometheus_config_dir }}/rules/alerts.yml"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0644'
+  notify: restart prometheus
+
+- name: "Ensure Prometheus is started and enabled"
+  systemd:
+    name: prometheus
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: "Wait for Prometheus to be ready"
+  uri:
+    url: "http://localhost:9090/-/ready"
+    status_code: 200
+  register: prometheus_ready
+  until: prometheus_ready.status == 200
+  retries: 10
+  delay: 3
+  ignore_errors: yes
+
+- name: "Check Prometheus targets"
+  uri:
+    url: "http://localhost:9090/api/v1/targets"
+    return_content: yes
+  register: prometheus_targets_status
+  ignore_errors: yes
+
+- name: "Get Prometheus service status"
+  systemd:
+    name: prometheus
+  register: prometheus_service_status
+  ignore_errors: yes
+
+- name: "Get Prometheus version"
+  shell: "{{ prometheus_install_dir }}/prometheus --version 2>&1 | head -1"
+  register: prometheus_version_output
+  changed_when: false
+  ignore_errors: yes
+
+- name: "Display Prometheus status"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   📊 Prometheus Configuration Complete        ║
+      ╚════════════════════════════════════════════════╝
+      
+      📦 Version:
+         {{ prometheus_version_output.stdout | default('Unknown') }}
+      
+      🚀 Service Status:
+         State: {{ prometheus_service_status.status.ActiveState | default('unknown') }}
+         Status: {{ 'Running ✅' if prometheus_service_status.status.ActiveState == 'active' else 'Stopped ❌' }}
+         Enabled: {{ 'Yes ✅' if prometheus_service_status.status.UnitFileState == 'enabled' else 'No ❌' }}
+      
+      🌐 API Status:
+         Ready Endpoint: {{ 'OK ✅' if prometheus_ready.status == 200 else 'Error ❌' }}
+         Targets API: {{ 'OK ✅' if prometheus_targets_status.status == 200 else 'Error ❌' }}
+      
+      📁 Paths:
+         Config: {{ prometheus_config_dir }}/prometheus.yml
+         Data: {{ prometheus_data_dir }}
+         Binary: {{ prometheus_install_dir }}/prometheus
+      
+      🔗 Access URLs:
+         Web UI: http://{{ ansible_default_ipv4.address }}:9090
+         Targets: http://{{ ansible_default_ipv4.address }}:9090/targets
+         Graph: http://{{ ansible_default_ipv4.address }}:9090/graph
+         Config: http://{{ ansible_default_ipv4.address }}:9090/config
+         Metrics: http://{{ ansible_default_ipv4.address }}:9090/metrics
+      
+      ✅ Next Steps:
+         1. Open Web UI: http://{{ ansible_default_ipv4.address }}:9090
+         2. Check targets: Status → Targets
+         3. Verify all targets are UP
+         4. Test query: up{job="prometheus"}

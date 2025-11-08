@@ -1,0 +1,228 @@
+---
+# Node Exporter Installation Tasks
+# Author: hyhoncute
+# Date: 2025-11-08 17:47:33 UTC
+
+- name: "Download Node Exporter to control node"
+  get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+    mode: '0644'
+  delegate_to: localhost
+  run_once: true
+  become: no
+
+- name: "Create Prometheus system user for Node Exporter"
+  user:
+    name: "{{ prometheus_user }}"
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+
+- name: "Check if Node Exporter is installed"
+  stat:
+    path: /usr/local/bin/node_exporter
+  register: node_exporter_binary
+
+- name: "Create temp directory on target"
+  file:
+    path: /tmp/node_exporter_install
+    state: directory
+    mode: '0755'
+  when: not node_exporter_binary.stat.exists
+
+- name: "Copy Node Exporter archive to target"
+  copy:
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+    dest: /tmp/node_exporter_install/node_exporter.tar.gz
+    mode: '0644'
+  when: not node_exporter_binary.stat.exists
+
+- name: "Extract Node Exporter"
+  unarchive:
+    src: /tmp/node_exporter_install/node_exporter.tar.gz
+    dest: /tmp/node_exporter_install/
+    remote_src: yes
+  when: not node_exporter_binary.stat.exists
+
+- name: "Copy Node Exporter binary"
+  copy:
+    src: "/tmp/node_exporter_install/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+    dest: /usr/local/bin/node_exporter
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: yes
+  when: not node_exporter_binary.stat.exists
+
+- name: "Ensure Node Exporter binary has correct permissions"
+  file:
+    path: /usr/local/bin/node_exporter
+    owner: root
+    group: root
+    mode: '0755'
+    state: file
+
+- name: "Set SELinux context for Node Exporter binary"
+  shell: |
+    chcon -t bin_t /usr/local/bin/node_exporter || true
+    restorecon -v /usr/local/bin/node_exporter || true
+  when: ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
+  ignore_errors: yes
+
+- name: "Cleanup Node Exporter installation files"
+  file:
+    path: /tmp/node_exporter_install
+    state: absent
+
+- name: "Create Node Exporter systemd service"
+  template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload systemd
+
+- name: "Configure firewall for Node Exporter"
+  firewalld:
+    port: "9100/tcp"
+    permanent: yes
+    state: enabled
+    immediate: yes
+    zone: "{{ firewall_zones[0] }}"
+  when: configure_firewall | bool
+  ignore_errors: yes
+
+- name: "Reload systemd daemon"
+  systemd:
+    daemon_reload: yes
+
+- name: "Enable Node Exporter service"
+  systemd:
+    name: node_exporter
+    enabled: yes
+
+- name: "Start Node Exporter service"
+  systemd:
+    name: node_exporter
+    state: started
+  register: node_exporter_start_result
+  ignore_errors: yes
+
+- name: "Get Node Exporter service logs if failed to start"
+  shell: "journalctl -u node_exporter -n 100 --no-pager"
+  register: node_exporter_logs
+  when: node_exporter_start_result is failed
+  changed_when: false
+
+- name: "Display Node Exporter error logs"
+  debug:
+    msg: |
+      ❌ Node Exporter failed to start!
+      
+      Service Status: {{ node_exporter_start_result.msg | default('Unknown') }}
+      
+      Logs (last 100 lines):
+      {{ node_exporter_logs.stdout }}
+  when: node_exporter_start_result is failed
+
+- name: "Fail if Node Exporter didn't start"
+  fail:
+    msg: |
+      Node Exporter service failed to start.
+      
+      Debug commands:
+        sudo systemctl status node_exporter
+        sudo journalctl -u node_exporter -n 100
+        sudo /usr/local/bin/node_exporter --version
+        ls -l /usr/local/bin/node_exporter
+  when: node_exporter_start_result is failed
+
+- name: "Wait a moment for service to initialize"
+  pause:
+    seconds: 3
+
+- name: "Wait for Node Exporter port to be available"
+  wait_for:
+    port: 9100
+    host: 127.0.0.1
+    delay: 1
+    timeout: 30
+    state: started
+  register: port_check
+  ignore_errors: yes
+
+- name: "Check port listening (alternative method)"
+  shell: "ss -tlnp | grep :9100 || echo 'Port not found'"
+  register: port_listening
+  changed_when: false
+  when: port_check is failed
+
+- name: "Display port debug info"
+  debug:
+    msg: |
+      Port Check Status: {{ 'OK ✅' if port_check is success else 'Failed ❌' }}
+      
+      {% if port_check is failed %}
+      Port Listening Check:
+      {{ port_listening.stdout }}
+      
+      Troubleshooting:
+        1. Check service status: sudo systemctl status node_exporter
+        2. Check logs: sudo journalctl -u node_exporter -n 50
+        3. Check firewall: sudo firewall-cmd --list-ports
+        4. Manual test: sudo /usr/local/bin/node_exporter &
+      {% endif %}
+  when: port_check is failed
+
+- name: "Verify Node Exporter metrics endpoint"
+  uri:
+    url: "http://localhost:9100/metrics"
+    return_content: yes
+    status_code: 200
+  register: node_exporter_metrics
+  retries: 5
+  delay: 3
+  until: node_exporter_metrics.status == 200
+  ignore_errors: yes
+
+- name: "Get Node Exporter service final status"
+  systemd:
+    name: node_exporter
+  register: node_exporter_service_status
+
+- name: "Get Node Exporter version"
+  shell: "/usr/local/bin/node_exporter --version 2>&1 | head -1"
+  register: node_exporter_version_output
+  changed_when: false
+  ignore_errors: yes
+
+- name: "Display Node Exporter final status"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   📈 Node Exporter Installation Result        ║
+      ╚════════════════════════════════════════════════╝
+      
+      📦 Binary:
+         Path: /usr/local/bin/node_exporter
+         Version: {{ node_exporter_version_output.stdout | default('Unknown') }}
+      
+      🚀 Service:
+         Name: node_exporter
+         State: {{ node_exporter_service_status.status.ActiveState | default('unknown') }}
+         Status: {{ 'Running ✅' if node_exporter_service_status.status.ActiveState == 'active' else 'Stopped ❌' }}
+         Enabled: {{ 'Yes ✅' if node_exporter_service_status.status.UnitFileState == 'enabled' else 'No ❌' }}
+      
+      🌐 Network:
+         Listen: {{ node_exporter_listen_address }}
+         Port: {{ 'OK ✅' if port_check is success else 'Failed ❌' }}
+         Metrics: {{ 'Available ✅' if node_exporter_metrics.status == 200 else 'Unavailable ❌' }}
+      
+      🔗 Access:
+         URL: http://{{ ansible_default_ipv4.address }}:9100/metrics
+      
+      ✅ Verify:
+         curl http://{{ ansible_default_ipv4.address }}:9100/metrics | head

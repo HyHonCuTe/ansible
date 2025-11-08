@@ -1,0 +1,122 @@
+---
+# Prometheus Installation Tasks
+# Author: hyhoncute
+# Date: 2025-11-08 17:05:26 UTC
+
+- name: "Create Prometheus system user"
+  user:
+    name: "{{ prometheus_user }}"
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+
+- name: "Create Prometheus directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0755'
+  loop:
+    - "{{ prometheus_install_dir }}"
+    - "{{ prometheus_data_dir }}"
+    - "{{ prometheus_config_dir }}"
+    - "{{ prometheus_config_dir }}/rules"
+
+- name: "Check if Prometheus is already installed"
+  stat:
+    path: "{{ prometheus_install_dir }}/prometheus"
+  register: prometheus_binary
+
+- name: "Download Prometheus"
+  get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    dest: /tmp/prometheus.tar.gz
+    mode: '0644'
+  when: not prometheus_binary.stat.exists
+
+- name: "Extract Prometheus"
+  unarchive:
+    src: /tmp/prometheus.tar.gz
+    dest: /tmp/
+    remote_src: yes
+  when: not prometheus_binary.stat.exists
+
+- name: "Copy Prometheus binaries"
+  copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "{{ prometheus_install_dir }}/{{ item }}"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0755'
+    remote_src: yes
+  loop:
+    - prometheus
+    - promtool
+  when: not prometheus_binary.stat.exists
+
+- name: "Copy Prometheus console files"
+  copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "{{ prometheus_config_dir }}/{{ item }}"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0755'
+    remote_src: yes
+  loop:
+    - consoles
+    - console_libraries
+  when: not prometheus_binary.stat.exists
+
+- name: "Cleanup Prometheus installation files"
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/prometheus.tar.gz
+    - "/tmp/prometheus-{{ prometheus_version }}.linux-amd64"
+  when: not prometheus_binary.stat.exists
+
+- name: "Create Prometheus systemd service"
+  template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload systemd
+
+- name: "Configure firewall for Prometheus"
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+    zone: "{{ firewall_zones[0] }}"
+  loop:
+    - "9090/tcp"
+  when: configure_firewall | bool
+  ignore_errors: yes
+
+- name: "Configure SELinux for Prometheus"
+  sefcontext:
+    target: "{{ item.path }}(/.*)?"
+    setype: "{{ item.setype }}"
+    state: present
+  loop:
+    - { path: "{{ prometheus_install_dir }}", setype: 'bin_t' }
+    - { path: "{{ prometheus_data_dir }}", setype: 'var_lib_t' }
+    - { path: "{{ prometheus_config_dir }}", setype: 'etc_t' }
+  when: configure_selinux | bool
+  ignore_errors: yes
+
+- name: "Apply SELinux context"
+  command: "restorecon -Rv {{ item }}"
+  loop:
+    - "{{ prometheus_install_dir }}"
+    - "{{ prometheus_data_dir }}"
+    - "{{ prometheus_config_dir }}"
+  when: configure_selinux | bool
+  ignore_errors: yes
+  changed_when: false

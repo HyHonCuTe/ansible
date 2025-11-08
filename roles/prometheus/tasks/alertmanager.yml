@@ -1,0 +1,107 @@
+---
+# Alertmanager Installation Tasks
+# Author: hyhoncute
+# Date: 2025-11-08 17:05:26 UTC
+
+- name: "Create Alertmanager directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0755'
+  loop:
+    - /opt/alertmanager
+    - /var/lib/alertmanager
+    - /etc/alertmanager
+
+- name: "Check if Alertmanager is installed"
+  stat:
+    path: /opt/alertmanager/alertmanager
+  register: alertmanager_binary
+
+- name: "Download Alertmanager"
+  get_url:
+    url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
+    dest: /tmp/alertmanager.tar.gz
+    mode: '0644'
+  when: not alertmanager_binary.stat.exists
+
+- name: "Extract Alertmanager"
+  unarchive:
+    src: /tmp/alertmanager.tar.gz
+    dest: /tmp/
+    remote_src: yes
+  when: not alertmanager_binary.stat.exists
+
+- name: "Copy Alertmanager binaries"
+  copy:
+    src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-amd64/{{ item }}"
+    dest: "/opt/alertmanager/{{ item }}"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0755'
+    remote_src: yes
+  loop:
+    - alertmanager
+    - amtool
+  when: not alertmanager_binary.stat.exists
+
+- name: "Cleanup Alertmanager files"
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/alertmanager.tar.gz
+    - "/tmp/alertmanager-{{ alertmanager_version }}.linux-amd64"
+  when: not alertmanager_binary.stat.exists
+
+- name: "Create Alertmanager configuration"
+  template:
+    src: alertmanager.yml.j2
+    dest: /etc/alertmanager/alertmanager.yml
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0644'
+  notify: restart alertmanager
+
+- name: "Create Alertmanager systemd service"
+  copy:
+    dest: /etc/systemd/system/alertmanager.service
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Alertmanager
+      After=network.target
+
+      [Service]
+      Type=simple
+      User={{ prometheus_user }}
+      ExecStart=/opt/alertmanager/alertmanager \
+        --config.file=/etc/alertmanager/alertmanager.yml \
+        --storage.path=/var/lib/alertmanager \
+        --web.listen-address={{ alertmanager_listen_address }}
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: reload systemd
+
+- name: "Configure firewall for Alertmanager"
+  firewalld:
+    port: "9093/tcp"
+    permanent: yes
+    state: enabled
+    immediate: yes
+    zone: "{{ firewall_zones[0] }}"
+  when: configure_firewall | bool
+  ignore_errors: yes
+
+- name: "Start and enable Alertmanager"
+  systemd:
+    name: alertmanager
+    state: started
+    enabled: yes
+    daemon_reload: yes

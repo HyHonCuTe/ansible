@@ -1,0 +1,59 @@
+---
+# Prometheus Role Default Variables
+# Author: hyhoncute
+# Date: 2025-11-08 17:05:26 UTC
+
+# Prometheus Version
+prometheus_version: "2.48.0"
+node_exporter_version: "1.7.0"
+alertmanager_version: "0.26.0"
+
+# Installation Directories
+prometheus_install_dir: /opt/prometheus
+prometheus_data_dir: /var/lib/prometheus
+prometheus_config_dir: /etc/prometheus
+
+# Service User
+prometheus_user: prometheus
+prometheus_group: prometheus
+
+# Network Configuration
+prometheus_listen_address: "0.0.0.0:9090"
+prometheus_retention_time: "15d"
+prometheus_retention_size: "0"
+
+# Node Exporter
+node_exporter_listen_address: "0.0.0.0:9100"
+install_node_exporter: true
+
+# Alertmanager
+alertmanager_listen_address: "0.0.0.0:9093"
+install_alertmanager: true
+
+# Scrape Configuration
+prometheus_scrape_interval: "15s"
+prometheus_evaluation_interval: "15s"
+
+# Targets
+prometheus_targets:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+
+# Alertmanager Configuration
+alertmanager_receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://localhost:5001/'
+
+# Firewall
+configure_firewall: true
+firewall_zones:
+  - public
+
+# SELinux
+configure_selinux: true

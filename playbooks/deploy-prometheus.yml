@@ -1,0 +1,72 @@
+---
+# Prometheus Deployment Playbook
+# Author: hyhoncute
+# Date: 2025-11-08 17:05:26 UTC
+
+- name: "Deploy Prometheus Monitoring Stack"
+  hosts: prometheus_servers
+  become: yes
+  gather_facts: yes
+  
+  roles:
+    - role: prometheus
+      tags:
+        - prometheus
+        - monitoring
+
+  tags:
+    - prometheus_server
+
+- name: "Deploy Node Exporter on all monitored hosts"
+  hosts: monitored_hosts
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: "Include Node Exporter installation"
+      include_role:
+        name: prometheus
+        tasks_from: node_exporter
+      tags:
+        - node_exporter
+        - agents
+
+- name: "Display deployment summary"
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: "Deployment complete"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════╗
+          ║   ✅ Prometheus Stack Deployed Successfully   ║
+          ╚════════════════════════════════════════════════╝
+          
+          📊 Deployment Summary:
+          ├─ Prometheus Servers: {{ groups['prometheus_servers'] | default([]) | length }}
+          ├─ Monitored Hosts: {{ groups['monitored_hosts'] | default([]) | length }}
+          └─ Total Hosts: {{ groups['all'] | default([]) | length }}
+          
+          🔗 Access Points:
+          {% for host in groups['prometheus_servers'] | default([]) %}
+          ├─ Prometheus UI: http://{{ hostvars[host].ansible_host | default(host) }}:9090
+          ├─ Targets: http://{{ hostvars[host].ansible_host | default(host) }}:9090/targets
+          └─ Alertmanager: http://{{ hostvars[host].ansible_host | default(host) }}:9093
+          {% endfor %}
+          
+          📈 Node Exporters:
+          {% for host in groups['monitored_hosts'] | default([]) %}
+          └─ {{ host }}: http://{{ hostvars[host].ansible_host | default(host) }}:9100/metrics
+          {% endfor %}
+          
+          ✅ Verification:
+          1. Open Prometheus UI (check link above)
+          2. Go to Status → Targets
+          3. Verify all targets show "UP"
+          4. Test query: up{job="node_exporter"}
+          
+          🎯 Next Steps:
+          - Configure Grafana
+          - Setup alerts
+          - Create dashboards
