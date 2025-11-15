@@ -1,0 +1,94 @@
+---
+# Grafana Configuration Tasks
+# Author: HyHonCuTe
+
+- name: "Configure Grafana main settings"
+  template:
+    src: grafana.ini.j2
+    dest: /etc/grafana/grafana.ini
+    owner: grafana
+    group: grafana
+    mode: '0640'
+  notify: restart grafana
+
+- name: "Ensure Grafana service is started"
+  systemd:
+    name: grafana-server
+    state: started
+    enabled: yes
+
+- name: "Wait for Grafana to be ready"
+  uri:
+    url: "{{ grafana_root_url }}/api/health"
+    method: GET
+    status_code: 200
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 60
+  delay: 3
+  ignore_errors: yes
+
+- name: "Additional wait for API stability"
+  pause:
+    seconds: 5
+
+- name: "Check if admin password is default"
+  uri:
+    url: "{{ grafana_root_url }}/api/org"
+    method: GET
+    user: "{{ grafana_admin_user }}"
+    password: "admin"
+    force_basic_auth: yes
+    status_code: [200, 401]
+  register: default_password_check
+  ignore_errors: yes
+  no_log: true
+
+- name: "Update admin password from default"
+  uri:
+    url: "{{ grafana_root_url }}/api/user/password"
+    method: PUT
+    user: "{{ grafana_admin_user }}"
+    password: "admin"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      oldPassword: "admin"
+      newPassword: "{{ grafana_admin_password }}"
+      confirmNew: "{{ grafana_admin_password }}"
+    status_code: [200, 401]
+  when: 
+    - grafana_admin_password != "admin"
+    - default_password_check.status == 200
+  register: password_change_result
+  ignore_errors: yes
+  no_log: true
+
+- name: "Verify new admin credentials"
+  uri:
+    url: "{{ grafana_root_url }}/api/org"
+    method: GET
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    status_code: 200
+  register: grafana_api_check
+  until: grafana_api_check.status == 200
+  retries: 10
+  delay: 2
+  ignore_errors: yes
+
+- name: "Display authentication status"
+  debug:
+    msg: |
+      {% if grafana_api_check.status == 200 %}
+      ✅ Grafana authentication successful
+      Username: {{ grafana_admin_user }}
+      {% elif password_change_result.status == 200 %}
+      ✅ Password changed successfully
+      Username: {{ grafana_admin_user }}
+      {% else %}
+      ⚠️  Authentication check skipped or failed
+      Please verify credentials manually after installation
+      Default credentials may still be active: admin/admin
+      {% endif %}

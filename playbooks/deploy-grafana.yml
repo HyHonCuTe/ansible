@@ -1,0 +1,234 @@
+---
+# Grafana Deployment Playbook
+# Author: HyHonCuTe
+# Date: 2025-11-15
+# Description: Deploy and configure Grafana with integrated dashboards
+
+- name: "Deploy Grafana Monitoring System"
+  hosts: monitoring_servers
+  become: yes
+  gather_facts: yes
+  
+  vars_files:
+    - ../roles/grafana/defaults/main.yml
+  
+  vars:
+    # Override variables if needed
+    grafana_admin_password: "Grafana@2025"
+    
+  pre_tasks:
+    - name: "Display deployment information"
+      debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════╗
+          ║         GRAFANA DEPLOYMENT STARTING                 ║
+          ╠══════════════════════════════════════════════════════╣
+          ║  Target Host: {{ inventory_hostname }}              ║
+          ║  OS Family: {{ ansible_os_family }}                 ║
+          ║  Grafana Version: {{ grafana_version }}             ║
+          ║  Installation Time: {{ ansible_date_time.iso8601 }} ║
+          ╚══════════════════════════════════════════════════════╝
+    
+    - name: "Check system requirements"
+      assert:
+        that:
+          - ansible_memtotal_mb >= 1024
+          - ansible_processor_vcpus >= 1
+        fail_msg: "System does not meet minimum requirements (1GB RAM, 1 CPU)"
+        success_msg: "System meets minimum requirements"
+    
+    - name: "Update system packages"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+  
+  roles:
+    - role: grafana
+      tags:
+        - grafana
+        - monitoring
+  
+  post_tasks:
+    - name: "Wait for Grafana to be fully started"
+      wait_for:
+        port: "{{ grafana_http_port }}"
+        delay: 5
+        timeout: 60
+        state: started
+    
+    - name: "Verify Grafana API health"
+      uri:
+        url: "{{ grafana_root_url }}/api/health"
+        method: GET
+        status_code: 200
+      register: health_check
+      retries: 10
+      delay: 3
+      until: health_check.status == 200
+    
+    - name: "Try to authenticate with new password first"
+      uri:
+        url: "{{ grafana_root_url }}/api/datasources"
+        method: GET
+        user: "{{ grafana_admin_user }}"
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: yes
+        status_code: [200, 401]
+      register: auth_new_password
+      ignore_errors: yes
+    
+    - name: "Try to authenticate with default password if new failed"
+      uri:
+        url: "{{ grafana_root_url }}/api/datasources"
+        method: GET
+        user: "{{ grafana_admin_user }}"
+        password: "admin"
+        force_basic_auth: yes
+        status_code: [200, 401]
+      register: auth_default_password
+      when: auth_new_password.status != 200
+      ignore_errors: yes
+    
+    - name: "Set working password"
+      set_fact:
+        working_password: "{{ grafana_admin_password if auth_new_password.status == 200 else 'admin' }}"
+        password_changed: "{{ auth_new_password.status == 200 }}"
+    
+    - name: "Get list of datasources"
+      uri:
+        url: "{{ grafana_root_url }}/api/datasources"
+        method: GET
+        user: "{{ grafana_admin_user }}"
+        password: "{{ working_password }}"
+        force_basic_auth: yes
+      register: datasources_check
+      ignore_errors: yes
+    
+    - name: "Get list of dashboards"
+      uri:
+        url: "{{ grafana_root_url }}/api/search?type=dash-db"
+        method: GET
+        user: "{{ grafana_admin_user }}"
+        password: "{{ working_password }}"
+        force_basic_auth: yes
+      register: dashboards_check
+      ignore_errors: yes
+    
+    - name: "Display deployment summary"
+      debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════╗
+          ║         GRAFANA DEPLOYMENT COMPLETED                ║
+          ╠══════════════════════════════════════════════════════╣
+          ║                                                      ║
+          ║  🌐 Access Information:                              ║
+          ║  ├─ URL: {{ grafana_root_url }}                      ║
+          ║  ├─ Username: {{ grafana_admin_user }}               ║
+          ║  └─ Password: {{ working_password }}                 ║
+          {% if not password_changed %}
+          ║                                                      ║
+          ║  ⚠️  WARNING: Default password still active!         ║
+          ║     Please change immediately after login           ║
+          {% endif %}
+          ║                                                      ║
+          ║  📊 Data Sources: {{ datasources_check.json | length if datasources_check.json is defined else 0 }} configured
+          ║  📈 Dashboards: {{ dashboards_check.json | length if dashboards_check.json is defined else 0 }} imported
+          ║                                                      ║
+          ║  ⚙️  Configured Data Sources:                        ║
+          {% for ds in grafana_datasources %}
+          ║  ├─ {{ ds.name }} ({{ ds.type }})                    ║
+          {% endfor %}
+          ║                                                      ║
+          ║  ⚠️  IMPORTANT NEXT STEPS:                           ║
+          {% if not password_changed %}
+          ║  1. ⚡ URGENT: Change the default admin password      ║
+          {% else %}
+          ║  1. ✅ Admin password has been changed               ║
+          {% endif %}
+          ║  2. Configure email notifications (if needed)        ║
+          ║  3. Set up SSL/TLS for production                   ║
+          ║  4. Configure backup for Grafana database           ║
+          ║  5. Review and customize dashboards                 ║
+          ║                                                      ║
+          ╚══════════════════════════════════════════════════════╝
+    
+    - name: "Create deployment report"
+      copy:
+        content: |
+          # Grafana Deployment Report
+          Generated: {{ ansible_date_time.iso8601 }}
+          Host: {{ inventory_hostname }}
+          
+          ## System Information
+          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Memory: {{ ansible_memtotal_mb }} MB
+          - CPU Cores: {{ ansible_processor_vcpus }}
+          
+          ## Grafana Configuration
+          - Version: {{ grafana_version }}
+          - URL: {{ grafana_root_url }}
+          - Admin User: {{ grafana_admin_user }}
+          - HTTP Port: {{ grafana_http_port }}
+          - Password Changed: {{ password_changed }}
+          
+          ## Data Sources
+          {% for ds in grafana_datasources %}
+          - {{ ds.name }} ({{ ds.type }})
+            - URL: {{ ds.url }}
+            - Default: {{ ds.is_default }}
+          {% endfor %}
+          
+          ## Installed Plugins
+          {% for plugin in grafana_plugins %}
+          - {{ plugin }}
+          {% endfor %}
+          
+          ## Dashboards
+          {% if dashboards_check.json is defined %}
+          {% for dash in dashboards_check.json %}
+          - {{ dash.title }} (ID: {{ dash.id }})
+          {% endfor %}
+          {% else %}
+          - Dashboard provisioning configured
+          - Check: {{ grafana_dashboards_dir }}
+          {% endif %}
+          
+          ## Service Status
+          - Service: {{ 'Running' if grafana_service_state == 'started' else 'Stopped' }}
+          - Enabled on Boot: {{ 'Yes' if grafana_service_enabled else 'No' }}
+          
+          ## Access Information
+          URL: {{ grafana_root_url }}
+          Username: {{ grafana_admin_user }}
+          Password: {{ working_password }}
+          
+          {% if not password_changed %}
+          ## ⚠️  SECURITY ALERT
+          The default password is still active. Please change it immediately:
+          1. Login to Grafana
+          2. Go to Profile > Change Password
+          3. Or use: grafana-cli admin reset-admin-password <new-password>
+          {% endif %}
+          
+          ## Security Recommendations
+          1. {% if not password_changed %}⚠️  URGENT: {% endif %}Change default admin password immediately
+          2. Enable HTTPS for production use
+          3. Configure firewall rules to restrict access
+          4. Set up authentication via LDAP/OAuth if needed
+          5. Enable audit logging
+          6. Regular backup of /var/lib/grafana
+          
+          ## Support
+          - Documentation: https://grafana.com/docs/
+          - Community: https://community.grafana.com/
+        dest: "/root/grafana_deployment_report_{{ ansible_date_time.date }}.txt"
+        mode: '0600'
+    
+    - name: "Save deployment info to log"
+      lineinfile:
+        path: /var/log/ansible_deployments.log
+        line: "{{ ansible_date_time.iso8601 }} - Grafana {{ grafana_version }} deployed on {{ inventory_hostname }} by {{ ansible_user_id }} - Password Changed: {{ password_changed }}"
+        create: yes
+      ignore_errors: yes
+

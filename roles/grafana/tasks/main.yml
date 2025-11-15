@@ -1,0 +1,61 @@
+---
+# Grafana Main Tasks
+# Author: HyHonCuTe
+# Date: 2025-11-15
+
+- name: "Display installation banner"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   🚀 Grafana Installation Starting            ║
+      ║   Version: {{ grafana_version }}              ║
+      ║   Time: {{ ansible_date_time.iso8601 }}       ║
+      ╚════════════════════════════════════════════════╝
+
+- name: "Include installation tasks"
+  include_tasks: install.yml
+  tags:
+    - install
+    - grafana_install
+
+- name: "Include configuration tasks"
+  include_tasks: configure.yml
+  tags:
+    - configure
+    - grafana_config
+
+- name: "Include datasource configuration"
+  include_tasks: datasources.yml
+  tags:
+    - datasources
+    - grafana_datasources
+
+- name: "Include plugins installation"
+  include_tasks: plugins.yml
+  tags:
+    - plugins
+    - grafana_plugins
+
+- name: "Include dashboard provisioning"
+  include_tasks: dashboards.yml
+  tags:
+    - dashboards
+    - grafana_dashboards
+
+- name: "Display completion message"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════╗
+      ║   ✅ Grafana Installation Completed!          ║
+      ╚════════════════════════════════════════════════╝
+      
+      🌐 Web Interface: {{ grafana_root_url }}
+      👤 Username: {{ grafana_admin_user }}
+      🔐 Password: {{ grafana_admin_password }}
+      
+      📊 Data Sources:
+      {% for ds in grafana_datasources %}
+      - {{ ds.name }} ({{ ds.type }})
+      {% endfor %}
+      
+      ⚠️  IMPORTANT: Change default password after first login!

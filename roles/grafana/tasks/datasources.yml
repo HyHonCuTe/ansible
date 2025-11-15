@@ -1,0 +1,73 @@
+---
+# Grafana Datasources Configuration
+# Author: HyHonCuTe
+
+- name: "Provision datasources configuration file"
+  template:
+    src: datasources.yml.j2
+    dest: "{{ grafana_provisioning_dir }}/datasources/datasources.yml"
+    owner: grafana
+    group: grafana
+    mode: '0640'
+  notify: restart grafana
+
+- name: "Wait for Grafana API to be available"
+  uri:
+    url: "{{ grafana_root_url }}/api/health"
+    method: GET
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 30
+  delay: 2
+
+- name: "Check current credentials work"
+  uri:
+    url: "{{ grafana_root_url }}/api/org"
+    method: GET
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    status_code: [200, 401]
+  register: auth_check
+  ignore_errors: yes
+
+- name: "Enable Zabbix plugin"
+  uri:
+    url: "{{ grafana_root_url }}/api/plugins/alexanderzobnin-zabbix-app/settings"
+    method: POST
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      enabled: true
+    status_code: [200, 409]
+  when: auth_check.status == 200
+  ignore_errors: yes
+
+- name: "Verify datasources"
+  uri:
+    url: "{{ grafana_root_url }}/api/datasources"
+    method: GET
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    status_code: 200
+  register: datasources_list
+  when: auth_check.status == 200
+  ignore_errors: yes
+
+- name: "Display configured datasources"
+  debug:
+    msg: |
+      📊 Configured Data Sources:
+      {% if datasources_list.json is defined %}
+      {% for ds in datasources_list.json %}
+      - {{ ds.name }} ({{ ds.type }}) - ID: {{ ds.id }}
+      {% endfor %}
+      {% else %}
+      ⚠️  Could not retrieve datasources list
+      Datasources are configured via provisioning and will be loaded automatically
+      Check: {{ grafana_provisioning_dir }}/datasources/datasources.yml
+      {% endif %}

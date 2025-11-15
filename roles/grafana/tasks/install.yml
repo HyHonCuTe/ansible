@@ -1,0 +1,66 @@
+---
+# Grafana Installation Tasks
+# Author: HyHonCuTe
+
+- name: "Check if Grafana is already installed"
+  shell: grafana-server -v 2>/dev/null || echo "not_installed"
+  register: grafana_check
+  changed_when: false
+  failed_when: false
+
+- name: "Add Grafana GPG key"
+  apt_key:
+    url: https://apt.grafana.com/gpg.key
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: "Add Grafana repository"
+  apt_repository:
+    repo: "deb https://apt.grafana.com stable main"
+    state: present
+    filename: grafana
+  when: ansible_os_family == "Debian"
+
+- name: "Update apt cache"
+  apt:
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Install Grafana"
+  apt:
+    name: grafana
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: "Install Grafana (RedHat)"
+  block:
+    - name: "Add Grafana repository (RedHat)"
+      yum_repository:
+        name: grafana
+        description: Grafana repository
+        baseurl: https://rpm.grafana.com
+        gpgkey: https://rpm.grafana.com/gpg.key
+        gpgcheck: yes
+        enabled: yes
+
+    - name: "Install Grafana package (RedHat)"
+      yum:
+        name: grafana
+        state: present
+  when: ansible_os_family == "RedHat"
+
+- name: "Ensure Grafana directories exist"
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: '0755'
+  loop:
+    - "{{ grafana_data_dir }}"
+    - "{{ grafana_logs_dir }}"
+    - "{{ grafana_plugins_dir }}"
+    - "{{ grafana_dashboards_dir }}"
+    - "{{ grafana_provisioning_dir }}/datasources"
+    - "{{ grafana_provisioning_dir }}/dashboards"
+    - "{{ grafana_provisioning_dir }}/notifiers"

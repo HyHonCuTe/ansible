@@ -1,0 +1,19 @@
+# Dashboard Provider Configuration
+# Managed by Ansible
+# Author: HyHonCuTe
+
+apiVersion: 1
+
+providers:
+{% for dashboard in grafana_dashboard_provisioning %}
+  - name: {{ dashboard.name }}
+    orgId: {{ dashboard.org_id }}
+    folder: {{ dashboard.folder }}
+    type: {{ dashboard.type }}
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: {{ dashboard.options.path }}
+      foldersFromFilesStructure: false
+{% endfor %}

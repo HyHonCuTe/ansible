@@ -1,0 +1,155 @@
+{
+  "dashboard": {
+    "title": "Zabbix Server Monitoring",
+    "tags": ["zabbix", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "id": 1,
+        "title": "Monitored Hosts",
+        "type": "stat",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "group": {"filter": ""},
+            "host": {"filter": ""},
+            "application": {"filter": ""},
+            "item": {"filter": "Number of monitored hosts"}
+          }
+        ]
+      },
+      {
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "id": 2,
+        "title": "Active Triggers",
+        "type": "stat",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "group": {"filter": ""},
+            "host": {"filter": ""},
+            "application": {"filter": ""},
+            "item": {"filter": "Number of enabled triggers"}
+          }
+        ]
+      },
+      {
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "id": 3,
+        "title": "Active Items",
+        "type": "stat",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "group": {"filter": ""},
+            "host": {"filter": ""},
+            "application": {"filter": ""},
+            "item": {"filter": "Number of enabled items"}
+          }
+        ]
+      },
+      {
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "id": 4,
+        "title": "Server Uptime",
+        "type": "stat",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "group": {"filter": ""},
+            "host": {"filter": "Zabbix server"},
+            "application": {"filter": ""},
+            "item": {"filter": "Zabbix server: Uptime"}
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "id": 5,
+        "title": "Active Problems by Severity",
+        "type": "bargauge",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "mode": 4,
+            "triggers": {
+              "minSeverity": 0
+            }
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "id": 6,
+        "title": "Problems History",
+        "type": "graph",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "mode": 4,
+            "triggers": {
+              "minSeverity": 2
+            }
+          }
+        ]
+      },
+      {
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+        "id": 7,
+        "title": "Host Status",
+        "type": "table",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "mode": 0,
+            "itemFilter": ".*",
+            "showDisabledItems": false
+          }
+        ]
+      },
+      {
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "id": 8,
+        "title": "Zabbix Queue",
+        "type": "graph",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "group": {"filter": ""},
+            "host": {"filter": "Zabbix server"},
+            "application": {"filter": ""},
+            "item": {"filter": "Zabbix queue"}
+          }
+        ]
+      },
+      {
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "id": 9,
+        "title": "Items Processing Rate",
+        "type": "graph",
+        "datasource": "Zabbix",
+        "targets": [
+          {
+            "group": {"filter": ""},
+            "host": {"filter": "Zabbix server"},
+            "application": {"filter": ""},
+            "item": {"filter": "Values processed per second"}
+          }
+        ]
+      }
+    ]
+  }
+}

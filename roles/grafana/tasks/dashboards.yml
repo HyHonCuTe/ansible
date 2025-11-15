@@ -1,0 +1,77 @@
+---
+# Grafana Dashboards Provisioning
+# Author: HyHonCuTe
+
+- name: "Create dashboard provisioning configuration"
+  template:
+    src: dashboard-provider.yml.j2
+    dest: "{{ grafana_provisioning_dir }}/dashboards/default.yml"
+    owner: grafana
+    group: grafana
+    mode: '0640'
+  notify: restart grafana
+
+- name: "Check if dashboard files exist"
+  stat:
+    path: "{{ role_path }}/files/dashboards"
+  register: dashboards_dir_check
+  delegate_to: localhost
+
+- name: "Copy dashboard files (if available)"
+  block:
+    - name: "Copy Prometheus Node Exporter dashboard"
+      copy:
+        src: "dashboards/node-exporter-full.json"
+        dest: "{{ grafana_dashboards_dir }}/node-exporter-full.json"
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      when: dashboards_dir_check.stat.exists
+
+    - name: "Copy Prometheus Overview dashboard"
+      copy:
+        src: "dashboards/prometheus-overview.json"
+        dest: "{{ grafana_dashboards_dir }}/prometheus-overview.json"
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      when: dashboards_dir_check.stat.exists
+
+    - name: "Copy Zabbix Server dashboard"
+      copy:
+        src: "dashboards/zabbix-server.json"
+        dest: "{{ grafana_dashboards_dir }}/zabbix-server.json"
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      when: dashboards_dir_check.stat.exists
+
+    - name: "Copy System Monitoring dashboard"
+      copy:
+        src: "dashboards/system-monitoring.json"
+        dest: "{{ grafana_dashboards_dir }}/system-monitoring.json"
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      when: dashboards_dir_check.stat.exists
+
+    - name: "Copy Security Monitoring dashboard"
+      copy:
+        src: "dashboards/security-monitoring.json"
+        dest: "{{ grafana_dashboards_dir }}/security-monitoring.json"
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      when: dashboards_dir_check.stat.exists
+  rescue:
+    - name: "Dashboard copy warning"
+      debug:
+        msg: "⚠️  Dashboard files not found - skipping dashboard provisioning. Add JSON files to roles/grafana/files/dashboards/"
+
+- name: "Set correct permissions on dashboard directory"
+  file:
+    path: "{{ grafana_dashboards_dir }}"
+    owner: grafana
+    group: grafana
+    mode: '0755'
+    recurse: yes

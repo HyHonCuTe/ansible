@@ -1,0 +1,73 @@
+# Grafana Configuration File
+# Managed by Ansible - Do not edit manually
+# Author: HyHonCuTe
+# Date: {{ ansible_date_time.iso8601 }}
+
+[server]
+protocol = {{ grafana_protocol }}
+http_addr = 
+http_port = {{ grafana_http_port }}
+domain = {{ grafana_domain }}
+root_url = {{ grafana_root_url }}
+serve_from_sub_path = false
+
+[database]
+type = {{ grafana_database_type }}
+{% if grafana_database_type == 'sqlite3' %}
+path = {{ grafana_database_path }}
+{% endif %}
+
+[security]
+admin_user = {{ grafana_admin_user }}
+admin_password = {{ grafana_admin_password }}
+allow_embedding = {{ grafana_security.allow_embedding | lower }}
+cookie_secure = {{ grafana_security.cookie_secure | lower }}
+cookie_samesite = {{ grafana_security.cookie_samesite }}
+
+[users]
+allow_sign_up = false
+allow_org_create = false
+auto_assign_org = true
+auto_assign_org_role = Viewer
+
+[auth.anonymous]
+enabled = false
+
+[smtp]
+enabled = {{ grafana_smtp_enabled | lower }}
+host = {{ grafana_smtp_host }}
+from_address = {{ grafana_smtp_from_address }}
+{% if grafana_smtp_from_name is defined %}
+from_name = {{ grafana_smtp_from_name }}
+{% endif %}
+
+# ✅ FIX: Sử dụng Unified Alerting thay vì Legacy Alerting
+[unified_alerting]
+enabled = {{ grafana_alerting_enabled | lower }}
+execute_alerts = {{ grafana_alerting_execute_alerts | lower }}
+
+[log]
+mode = console file
+level = info
+
+[paths]
+data = {{ grafana_data_dir }}
+logs = {{ grafana_logs_dir }}
+plugins = {{ grafana_plugins_dir }}
+provisioning = {{ grafana_provisioning_dir }}
+
+[analytics]
+reporting_enabled = false
+check_for_updates = true
+
+[metrics]
+enabled = true
+interval_seconds = 10
+
+[dashboards]
+versions_to_keep = 20
+min_refresh_interval = 5s
+
+[plugins]
+enable_alpha = false
+app_tls_skip_verify_insecure = false

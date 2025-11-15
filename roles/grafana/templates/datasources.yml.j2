@@ -1,0 +1,29 @@
+# Grafana Datasources Configuration
+# Managed by Ansible
+# Author: HyHonCuTe
+
+apiVersion: 1
+
+datasources:
+{% for datasource in grafana_datasources %}
+  - name: {{ datasource.name }}
+    type: {{ datasource.type }}
+    access: {{ datasource.access }}
+    url: {{ datasource.url }}
+    isDefault: {{ datasource.is_default | lower }}
+    editable: {{ datasource.editable | lower }}
+{% if datasource.json_data is defined %}
+    jsonData:
+{% for key, value in datasource.json_data.items() %}
+      {{ key }}: {{ value if value is boolean else '"' + value|string + '"' }}
+{% endfor %}
+{% endif %}
+{% if datasource.secure_json_data is defined %}
+    secureJsonData:
+{% for key, value in datasource.secure_json_data.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+    version: 1
+
+{% endfor %}

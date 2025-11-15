@@ -1,0 +1,22 @@
+---
+# Grafana Plugins Installation
+# Author: HyHonCuTe
+
+- name: "Install Grafana plugins"
+  command: "grafana-cli plugins install {{ item }}"
+  loop: "{{ grafana_plugins }}"
+  register: plugin_install
+  changed_when: "'Installed' in plugin_install.stdout"
+  failed_when: false
+  notify: restart grafana
+
+- name: "Check installed plugins"
+  command: "grafana-cli plugins ls"
+  register: installed_plugins
+  changed_when: false
+
+- name: "Display installed plugins"
+  debug:
+    msg: |
+      📦 Installed Plugins:
+      {{ installed_plugins.stdout_lines | join('\n') }}

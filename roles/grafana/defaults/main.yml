@@ -1,0 +1,101 @@
+---
+# Grafana Default Variables
+# Author: HyHonCuTe
+# Date: 2025-11-15
+
+# Grafana Installation
+grafana_version: "10.2.2"
+grafana_package: "grafana-{{ grafana_version }}"
+
+# Grafana Service Configuration
+grafana_http_port: 3000
+grafana_domain: "localhost"
+grafana_root_url: "http://{{ grafana_domain }}:{{ grafana_http_port }}"
+grafana_protocol: "http"
+
+# Grafana Admin Credentials
+grafana_admin_user: "admin"
+grafana_admin_password: "admin@123"
+
+# Grafana Database
+grafana_database_type: "sqlite3"
+grafana_database_path: "/var/lib/grafana/grafana.db"
+
+# Grafana Directories
+grafana_data_dir: "/var/lib/grafana"
+grafana_logs_dir: "/var/log/grafana"
+grafana_plugins_dir: "/var/lib/grafana/plugins"
+grafana_provisioning_dir: "/etc/grafana/provisioning"
+grafana_dashboards_dir: "/var/lib/grafana/dashboards"
+
+# Auto-detect Prometheus and Zabbix URLs or use defaults
+prometheus_url: "http://localhost:9090"
+zabbix_url: "http://localhost/zabbix/api_jsonrpc.php"
+zabbix_username: "Admin"
+zabbix_password: "zabbix"
+
+# Data Sources Configuration
+grafana_datasources:
+  - name: "Prometheus"
+    type: "prometheus"
+    access: "proxy"
+    url: "{{ prometheus_url }}"
+    is_default: true
+    editable: true
+    json_data:
+      httpMethod: "POST"
+      timeInterval: "30s"
+  
+  - name: "Zabbix"
+    type: "alexanderzobnin-zabbix-datasource"
+    access: "proxy"
+    url: "{{ zabbix_url }}"
+    is_default: false
+    editable: true
+    json_data:
+      username: "{{ zabbix_username }}"
+      trends: true
+      trendsFrom: "7d"
+      trendsRange: "4d"
+      cacheTTL: "1h"
+    secure_json_data:
+      password: "{{ zabbix_password }}"
+
+# Grafana Plugins to Install
+grafana_plugins:
+  - alexanderzobnin-zabbix-app
+  - grafana-clock-panel
+  # Removed deprecated Angular plugins that don't work with Grafana 10.x:
+  # - grafana-piechart-panel (use native pie chart instead)
+  # - grafana-worldmap-panel (use geomap panel instead)
+  # - natel-discrete-panel
+  # - yesoreyeram-boomtable-panel
+
+# Dashboard Provisioning
+grafana_dashboard_provisioning:
+  - name: "Default Dashboards"
+    org_id: 1
+    folder: "Monitoring"
+    type: "file"
+    options:
+      path: "{{ grafana_dashboards_dir }}"
+
+# Security Settings
+grafana_security:
+  allow_embedding: false
+  cookie_secure: false
+  cookie_samesite: "lax"
+
+# SMTP/Email Settings (Optional)
+grafana_smtp_enabled: false
+grafana_smtp_host: "localhost:25"
+grafana_smtp_from_address: "grafana@example.com"
+grafana_smtp_from_name: "Grafana"
+
+# Alert Configuration
+grafana_alerting_enabled: true
+grafana_alerting_execute_alerts: true
+
+# Service Settings
+grafana_service_enabled: true
+grafana_service_state: "started"
