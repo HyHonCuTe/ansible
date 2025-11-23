@@ -1,6 +1,6 @@
 ---
 # Install and Configure Zabbix Agent
-# Author: HiepvHo
+# Author: Hyhoncute
 # Updated: 2025-10-28 15:10:00 UTC
 
 - name: "Display Zabbix Agent installation start"

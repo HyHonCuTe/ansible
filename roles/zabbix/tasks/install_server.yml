@@ -1,6 +1,6 @@
 ---
 # Install Zabbix Server with all fixes
-# Author: HiepvHo
+# Author: Hyhoncute
 # Updated: 2025-10-26 15:51:30 UTC
 
 - name: "Display Zabbix Server installation start"
@@ -11,7 +11,7 @@
       ╚════════════════════════════════════════════════╝
       
       Version: Zabbix {{ zabbix_version }}
-      Deployed by: HiepvHo
+      Deployed by: Hyhoncute
       Time: {{ ansible_date_time.iso8601 }}
 
 - name: "Install Zabbix repository"
@@ -607,7 +607,7 @@
       ╚════════════════════════════════════════════════╝
       
       📦 Version: {{ server_version.stdout | default('Zabbix ' + zabbix_version) }}
-      👤 Deployed by: HiepvHo
+      👤 Deployed by: Hyhoncute
       📅 Date: {{ ansible_date_time.iso8601 }}
       
       🗄️  Database:

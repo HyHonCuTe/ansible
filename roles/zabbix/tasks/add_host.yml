@@ -1,6 +1,6 @@
 ---
 # Add Zabbix Agent Host to Server via API
-# Author: HiepvHo
+# Author: Hyhoncute
 # Date: 2025-10-28 15:36:18 UTC
 
 - name: "Set host variables for localhost delegation"

@@ -1,48 +1,103 @@
 ---
 # File: roles/scap_check/tasks/linux.yml
 
-- name: "Cài đặt gói OpenSCAP"
+# ==================== DETECT OS & INSTALL PACKAGES ====================
+- name: "Cài đặt gói OpenSCAP cho RedHat/CentOS/AlmaLinux/Rocky"
   ansible.builtin.package:
     name:
       - openscap-scanner
       - scap-security-guide
     state: present
+  when: ansible_os_family == "RedHat"
+
+- name: "Cài đặt gói OpenSCAP cho Ubuntu/Debian"
+  ansible.builtin.package:
+    name:
+      - libopenscap8
+      - ssg-base
+      - ssg-debderived
+      - ssg-debian
+      - ssg-nondebian
+    state: present
+  when: ansible_os_family == "Debian"
+
+# ==================== DETERMINE SCAP PROFILE & DATASTREAM ====================
+- name: "Xác định SCAP profile và datastream dựa trên OS"
+  ansible.builtin.set_fact:
+    scap_profile: >-
+      {%- if ansible_distribution == "AlmaLinux" -%}
+        xccdf_org.ssgproject.content_profile_cis_server_l1
+      {%- elif ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04" -%}
+        xccdf_org.ssgproject.content_profile_cis_level1_server
+      {%- elif ansible_distribution == "Ubuntu" and ansible_distribution_version == "20.04" -%}
+        xccdf_org.ssgproject.content_profile_cis_level1_server
+      {%- elif ansible_distribution == "Debian" -%}
+        xccdf_org.ssgproject.content_profile_cis_level1_server
+      {%- elif ansible_os_family == "RedHat" -%}
+        xccdf_org.ssgproject.content_profile_cis_server_l1
+      {%- else -%}
+        xccdf_org.ssgproject.content_profile_cis_level1_server
+      {%- endif -%}
+    scap_datastream_pattern: >-
+      {%- if ansible_distribution == "AlmaLinux" and ansible_distribution_major_version == "9" -%}
+        ssg-almalinux9-ds.xml
+      {%- elif ansible_distribution == "AlmaLinux" and ansible_distribution_major_version == "8" -%}
+        ssg-almalinux8-ds.xml
+      {%- elif ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04" -%}
+        ssg-ubuntu2204-ds.xml
+      {%- elif ansible_distribution == "Ubuntu" and ansible_distribution_version == "20.04" -%}
+        ssg-ubuntu2004-ds.xml
+      {%- elif ansible_distribution == "Debian" and ansible_distribution_major_version == "11" -%}
+        ssg-debian11-ds.xml
+      {%- elif ansible_distribution == "Debian" and ansible_distribution_major_version == "10" -%}
+        ssg-debian10-ds.xml
+      {%- elif ansible_os_family == "RedHat" and ansible_distribution_major_version == "9" -%}
+        ssg-rhel9-ds.xml
+      {%- elif ansible_os_family == "RedHat" and ansible_distribution_major_version == "8" -%}
+        ssg-rhel8-ds.xml
+      {%- else -%}
+        ssg-*-ds.xml
+      {%- endif -%}
 
 - name: "Tạo thư mục lưu kết quả kiểm tra trên máy đích (Linux)"
   ansible.builtin.file:
     path: /var/tmp/scap
     state: directory
     mode: '0755'
-  when: ansible_os_family != "Windows"
 
-- name: "Tìm file datastream SCAP của AlmaLinux"
+- name: "Tìm file datastream SCAP"
   ansible.builtin.find:
     paths: /usr/share/xml/scap/ssg/content/
-    patterns: "ssg-almalinux*-ds.xml"
+    patterns: "{{ scap_datastream_pattern }}"
   register: scap_files
-  when: ansible_os_family != "Windows"
 
 - name: "Dừng playbook nếu không tìm thấy file SCAP"
   ansible.builtin.fail:
-    msg: "Không tìm thấy file SCAP của AlmaLinux trong /usr/share/xml/scap/ssg/content/"
-  when:
-    - ansible_os_family != "Windows"
-    - scap_files.matched | int == 0
+    msg: |
+      ❌ Không tìm thấy file SCAP phù hợp!
+      OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+      Pattern: {{ scap_datastream_pattern }}
+      
+      💡 Kiểm tra các file có sẵn:
+      ls -la /usr/share/xml/scap/ssg/content/
+  when: scap_files.matched | int == 0
 
 - name: "Hiển thị profile đang sử dụng"
   ansible.builtin.debug:
     msg: |
-      🔍 Scanning với profile: {{ cis_profile }}
-      📄 SCAP file: {{ scap_files.files[0].path }}
-      🖥️  Host: {{ inventory_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})
-  when: ansible_os_family != "Windows"
+      🔍 ===== OPENSCAN CONFIGURATION =====
+      🖥️  Host:        {{ inventory_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})
+      🐧 OS:          {{ ansible_distribution }} {{ ansible_distribution_version }}
+      📋 Profile:     {{ scap_profile }}
+      📄 SCAP file:   {{ scap_files.files[0].path }}
+      🔧 Remediate:   {{ auto_remediate | default(false) }}
 
 # ==================== SCAN TRƯỚC KHI FIX ====================
 - name: "Chạy kiểm tra CIS Benchmark với OpenSCAP (TRƯỚC FIX)"
   ansible.builtin.command: >
     oscap xccdf eval
     --fetch-remote-resources
-    --profile {{ cis_profile }}
+    --profile {{ scap_profile }}
     --results /var/tmp/scap/scan_before.xml
     --report /var/tmp/scap/scan_before.html
     {{ scap_files.files[0].path }}
@@ -84,17 +139,19 @@
 # ==================== TẠO THỦ MỤC TRÊN CONTROLLER ====================
 - name: "Tạo thư mục results trên Ansible Controller"
   delegate_to: localhost
+  become: false
   run_once: false
   ansible.builtin.file:
-    path: "{{ playbook_dir }}/../roles/scap_check/results"
+    path: "{{ playbook_dir }}/../roles/openscap/results"
     state: directory
     mode: '0775'
 
 - name: "Tạo thư mục backup trên Ansible Controller"
   delegate_to: localhost
+  become: false
   run_once: false
   ansible.builtin.file:
-    path: "{{ playbook_dir }}/../roles/scap_check/backup"
+    path: "{{ playbook_dir }}/../roles/openscap/backup"
     state: directory
     mode: '0775'
 
@@ -102,7 +159,7 @@
 - name: "Copy báo cáo TRƯỚC FIX về Ansible Controller"
   ansible.builtin.fetch:
     src: /var/tmp/scap/scan_before.html
-    dest: "{{ playbook_dir }}/../roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
+    dest: "{{ playbook_dir }}/../roles/openscap/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
     flat: yes
   when: ansible_os_family != "Windows"
 
@@ -137,7 +194,7 @@
 - name: "Copy backup về Ansible Controller"
   ansible.builtin.fetch:
     src: "{{ backup_file_path.stdout }}"
-    dest: "{{ playbook_dir }}/../roles/scap_check/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.tar.gz"
+    dest: "{{ playbook_dir }}/../roles/openscap/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.tar.gz"
     flat: yes
   when:
     - ansible_os_family != "Windows"
@@ -150,7 +207,7 @@
     msg: |
       💾 ===== BACKUP INFO =====
       Remote backup: {{ backup_file_path.stdout }}
-      Local backup:  {{ playbook_dir }}/../roles/scap_check/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
+      Local backup:  {{ playbook_dir }}/../roles/openscap/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
       
       🔙 Để restore (trên remote host):
       sudo tar -xzf {{ backup_file_path.stdout }} -C /
@@ -166,7 +223,7 @@
     oscap xccdf eval
     --remediate
     --fetch-remote-resources
-    --profile {{ cis_profile }}
+    --profile {{ scap_profile }}
     --results /var/tmp/scap/scan_after.xml
     --report /var/tmp/scap/scan_after.html
     {{ scap_files.files[0].path }}
@@ -202,7 +259,7 @@
 - name: "Copy báo cáo SAU FIX về Ansible Controller"
   ansible.builtin.fetch:
     src: /var/tmp/scap/scan_after.html
-    dest: "{{ playbook_dir }}/../roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
+    dest: "{{ playbook_dir }}/../roles/openscap/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.html"
     flat: yes
   when:
     - ansible_os_family != "Windows"
@@ -230,7 +287,7 @@
       ├─ IP Address:   {{ ansible_default_ipv4.address | default('N/A') }}
       └─ OS:           {{ ansible_distribution }} {{ ansible_distribution_version }}
       
-      📋 Profile: {{ cis_profile }}
+      📋 Profile: {{ scap_profile }}
       
       ┌─────────────────────────────────────────────────────────────────┐
       │                    TRƯỚC FIX vs SAU FIX                         │
@@ -250,17 +307,17 @@
       
       {% endif %}
       📂 Files Saved:
-      ├─ Before Report:  roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_*.html
+      ├─ Before Report:  roles/openscap/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_BEFORE_*.html
       {% if auto_remediate | default(false) %}
-      ├─ After Report:   roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_*.html
-      └─ Backup:         roles/scap_check/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
+      ├─ After Report:   roles/openscap/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_AFTER_*.html
+      └─ Backup:         roles/openscap/backup/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_backup_*.tar.gz
       {% else %}
       └─ (Auto-remediate not enabled)
       {% endif %}
       
       {% if not auto_remediate | default(false) %}
       💡 Để chạy auto-fix:
-      ansible-playbook playbooks/scap_check.yml -e "auto_remediate=true"
+      ansible-playbook playbooks/openscap.yml -e "auto_remediate=true"
       {% endif %}
       
       ═══════════════════════════════════════════════════════════════════
@@ -286,7 +343,7 @@
          sudo reboot
       
       2. Hoặc từ controller:
-         scp roles/scap_check/backup/{{ inventory_hostname }}_*_backup_*.tar.gz {{ ansible_user }}@{{ ansible_default_ipv4.address }}:/tmp/
+         scp roles/openscap/backup/{{ inventory_hostname }}_*_backup_*.tar.gz {{ ansible_user }}@{{ ansible_default_ipv4.address }}:/tmp/
          ssh {{ ansible_user }}@{{ ansible_default_ipv4.address }} 'sudo tar -xzf /tmp/backup_*.tar.gz -C / && sudo reboot'
   when:
     - ansible_os_family != "Windows"
@@ -296,6 +353,7 @@
 # ==================== TẠO FILE SUMMARY ====================
 - name: "Tạo file summary report"
   delegate_to: localhost
+  become: false
   ansible.builtin.copy:
     content: |
       ═══════════════════════════════════════════════════════════════
@@ -308,7 +366,7 @@
       IP Address:        {{ ansible_default_ipv4.address | default('N/A') }}
       Operating System:  {{ ansible_distribution }} {{ ansible_distribution_version }}
       Scan Date:         {{ lookup('pipe', 'date "+%Y-%m-%d %H:%M:%S"') }}
-      Profile:           {{ cis_profile }}
+      Profile:           {{ scap_profile }}
       
       Scan Results BEFORE Remediation:
       ─────────────────────────────────────────────────────────────
@@ -339,6 +397,6 @@
       {% endif %}
       
       ═══════════════════════════════════════════════════════════════
-    dest: "{{ playbook_dir }}/../roles/scap_check/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_SUMMARY_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.txt"
+    dest: "{{ playbook_dir }}/../roles/openscap/results/{{ inventory_hostname }}_{{ ansible_default_ipv4.address | default('unknown') }}_SUMMARY_{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}.txt"
     mode: '0644'
   when: ansible_os_family != "Windows"
