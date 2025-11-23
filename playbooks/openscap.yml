@@ -3,6 +3,6 @@
   become: true
 
   roles:
-    - scap_check
+    - openscap
 
 
