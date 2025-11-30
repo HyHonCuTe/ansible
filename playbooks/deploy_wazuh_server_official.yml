@@ -145,12 +145,52 @@
         mode: '0600'
       when: wazuh_install.stdout is defined
 
-    - name: "🔑 Extract credentials from installation output"
+    - name: "🔍 Find wazuh-install-files.tar location"
+      ansible.builtin.find:
+        paths: "{{ wazuh_install_dir }}"
+        patterns: "wazuh-install-files.tar"
+        recurse: no
+      register: tar_file_search
+
+    - name: "📦 Extract wazuh-install-files.tar if exists"
+      ansible.builtin.unarchive:
+        src: "{{ tar_file_search.files[0].path }}"
+        dest: "{{ wazuh_install_dir }}"
+        remote_src: yes
+      when: tar_file_search.matched > 0
+
+    - name: "🔑 Extract credentials from wazuh-passwords.txt"
       ansible.builtin.shell: |
-        grep -A 10 "credentials" {{ wazuh_install_dir }}/wazuh-install.log | tail -5
-      register: credentials_output
+        if [ -f "{{ wazuh_install_dir }}/wazuh-install-files/wazuh-passwords.txt" ]; then
+          cat {{ wazuh_install_dir }}/wazuh-install-files/wazuh-passwords.txt
+        elif [ -f "{{ wazuh_install_dir }}/wazuh-passwords.txt" ]; then
+          cat {{ wazuh_install_dir }}/wazuh-passwords.txt
+        else
+          grep -i "password\|user\|admin" {{ wazuh_install_dir }}/wazuh-install.log | head -20
+        fi
+      register: credentials_raw
       changed_when: false
       failed_when: false
+
+    - name: "🔐 Parse admin username"
+      ansible.builtin.shell: |
+        echo "{{ credentials_raw.stdout }}" | grep -i "admin" | grep -oP "(?<=User: )'[^']+'" | tr -d "'" || echo "admin"
+      register: admin_username
+      changed_when: false
+      failed_when: false
+
+    - name: "🔐 Parse admin password"
+      ansible.builtin.shell: |
+        echo "{{ credentials_raw.stdout }}" | grep -i "admin" | grep -oP "(?<=Password: )'[^']+'" | tr -d "'" || \
+        echo "{{ credentials_raw.stdout }}" | grep -A1 "'admin'" | tail -1 | awk '{print $2}' | tr -d "'"
+      register: admin_password
+      changed_when: false
+      failed_when: false
+
+    - name: "📝 Set credentials facts"
+      ansible.builtin.set_fact:
+        wazuh_admin_user: "{{ admin_username.stdout | trim | default('admin', true) }}"
+        wazuh_admin_pass: "{{ admin_password.stdout | trim | default('CHECK_LOG_FILE', true) }}"
 
     - name: "⏳ Wait for services to stabilize (60 seconds)"
       ansible.builtin.pause:
@@ -239,31 +279,42 @@
           ├─ API Endpoint:   https://{{ ansible_default_ipv4.address }}:55000
           └─ Manager IP:     {{ ansible_default_ipv4.address }}
           
-          🔐 Credentials:
-          {{ credentials_output.stdout if credentials_output.stdout is defined else 'Check installation log for credentials' }}
+          🔐 LOGIN CREDENTIALS:
+          ┌────────────────────────────────────────────────────────────────┐
+          │ Username: {{ wazuh_admin_user }}                                │
+          │ Password: {{ wazuh_admin_pass }}                                │
+          └────────────────────────────────────────────────────────────────┘
+          
+          {% if wazuh_admin_pass == 'CHECK_LOG_FILE' %}
+          ⚠️  Password parsing failed. View manually:
+          sudo cat {{ wazuh_install_dir }}/wazuh-install-files/wazuh-passwords.txt
+          {% endif %}
           
           📁 Installation Files:
-          ├─ Installation Log:    {{ wazuh_install_dir }}/wazuh-install.log
-          ├─ Installation Output: {{ wazuh_install_dir }}/wazuh-install-output.txt
-          └─ Credentials saved in these files
+          ├─ Passwords File: {{ wazuh_install_dir }}/wazuh-install-files/wazuh-passwords.txt
+          ├─ Installation Log: {{ wazuh_install_dir }}/wazuh-install.log
+          └─ Installation Output: {{ wazuh_install_dir }}/wazuh-install-output.txt
           
           ⚠️  IMPORTANT NEXT STEPS:
-          1. Save your credentials from the log files above
-          2. Change default passwords immediately
-          3. Access dashboard: {{ dashboard_url }}
-          4. Deploy agents using:
+          1. ⚠️  SAVE YOUR PASSWORD NOW! (Copy from above)
+          2. 🌐 Login to Dashboard: {{ dashboard_url }}
+          3. 🔑 Change default password immediately:
+             sudo /usr/share/wazuh-indexer/plugins/opensearch-security/tools/wazuh-passwords-tool.sh -u admin -p NewPassword
+          4. 🤖 Deploy agents:
              ansible-playbook -i inventory.ini playbooks/deploy_wazuh_agent.yml
           
           🔧 Useful Commands:
-          # View credentials again:
-          sudo cat {{ wazuh_install_dir }}/wazuh-install.log | grep -A 10 "credentials"
+          # View all credentials:
+          sudo cat {{ wazuh_install_dir }}/wazuh-install-files/wazuh-passwords.txt
+          
+          # Or from tar file:
+          sudo tar -xOf {{ wazuh_install_dir }}/wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt
           
           # Check services:
           sudo systemctl status wazuh-manager wazuh-indexer wazuh-dashboard
           
           # View logs:
           sudo tail -f /var/ossec/logs/ossec.log
-          sudo journalctl -fu wazuh-manager.service
           
           # List agents:
           sudo /var/ossec/bin/agent_control -l
@@ -273,15 +324,44 @@
     - name: "💾 Save credentials to local file"
       ansible.builtin.copy:
         content: |
-          WAZUH SERVER CREDENTIALS
-          ========================
+          ╔════════════════════════════════════════════════════════════════╗
+          ║              WAZUH SERVER CREDENTIALS                          ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
           Generated: {{ ansible_date_time.iso8601 }}
           Server IP: {{ ansible_default_ipv4.address }}
           Dashboard: {{ dashboard_url }}
           
-          {{ credentials_output.stdout if credentials_output.stdout is defined else 'See installation log' }}
+          ┌────────────────────────────────────────────────────────────────┐
+          │                     LOGIN CREDENTIALS                          │
+          ├────────────────────────────────────────────────────────────────┤
+          │ Username: {{ wazuh_admin_user }}                               │
+          │ Password: {{ wazuh_admin_pass }}                               │
+          └────────────────────────────────────────────────────────────────┘
           
-          Full installation log: {{ wazuh_install_dir }}/wazuh-install.log
+          ⚠️  SECURITY WARNING:
+          1. This file contains sensitive credentials
+          2. Change the password immediately after first login
+          3. Delete this file after saving credentials securely
+          
+          📝 HOW TO LOGIN:
+          1. Open browser: {{ dashboard_url }}
+          2. Username: {{ wazuh_admin_user }}
+          3. Password: {{ wazuh_admin_pass }}
+          4. Click "Log in"
+          
+          🔄 HOW TO CHANGE PASSWORD:
+          sudo /usr/share/wazuh-indexer/plugins/opensearch-security/tools/wazuh-passwords-tool.sh -u admin -p YourNewPassword
+          
+          📁 ALL CREDENTIALS FILE:
+          {{ wazuh_install_dir }}/wazuh-install-files/wazuh-passwords.txt
+          
+          ───────────────────────────────────────────────────────────────────
+          
+          FULL CREDENTIALS (All Users):
+          {{ credentials_raw.stdout }}
+          
+          ═══════════════════════════════════════════════════════════════════
         dest: "{{ wazuh_install_dir }}/WAZUH_CREDENTIALS.txt"
         mode: '0600'
       when: wazuh_save_credentials | bool
@@ -297,18 +377,34 @@
       ansible.builtin.debug:
         msg: |
           
-          🎉 Wazuh Server installation completed successfully!
+          ╔════════════════════════════════════════════════════════════════╗
+          ║       🎉 WAZUH SERVER INSTALLATION COMPLETED!                  ║
+          ╚════════════════════════════════════════════════════════════════╝
           
-          📋 Next Steps:
-          1. Credentials saved to: ./wazuh-credentials-{{ ansible_hostname }}.txt
-          2. Login to Dashboard: {{ dashboard_url }}
-          3. Deploy Agents: ansible-playbook -i inventory.ini playbooks/deploy_wazuh_agent.yml
+          📋 QUICK ACCESS:
+          ├─ Dashboard: {{ dashboard_url }}
+          ├─ Username:  {{ wazuh_admin_user }}
+          └─ Password:  {{ wazuh_admin_pass }}
+          
+          📄 Credentials saved to:
+          ├─ Local:  ./wazuh-credentials-{{ ansible_hostname }}.txt
+          └─ Remote: {{ wazuh_install_dir }}/WAZUH_CREDENTIALS.txt
+          
+          🚀 NEXT STEPS:
+          1. 🌐 Login: {{ dashboard_url }}
+          2. 🔑 Change password (REQUIRED!)
+          3. 🤖 Deploy agents: 
+             ansible-playbook -i inventory.ini playbooks/deploy_wazuh_agent.yml
           
           📚 Documentation:
           - Official Docs: https://documentation.wazuh.com/
           - Agent Deployment: See playbooks/deploy_wazuh_agent.yml
           
-          🔒 Security:
-          - Change default passwords immediately
-          - Review firewall rules
-          - Enable 2FA if needed
+          ⚠️  SECURITY CHECKLIST:
+          ☐ Change default admin password
+          ☐ Review firewall rules
+          ☐ Enable 2FA (recommended)
+          ☐ Delete credentials file after saving: ./wazuh-credentials-*.txt
+          ☐ Setup backup procedures
+          
+          ═══════════════════════════════════════════════════════════════════
