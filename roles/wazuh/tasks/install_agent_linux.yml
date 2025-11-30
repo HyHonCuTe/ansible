@@ -83,6 +83,37 @@
     - selinux_status.stdout == "Enforcing"
   failed_when: false
 
+# ==================== REMOVE DUPLICATE AGENT ON MANAGER (IF EXISTS) ====================
+- name: "Kiểm tra agent đã tồn tại trên Manager"
+  ansible.builtin.shell: |
+    /var/ossec/bin/agent_control -l 2>/dev/null | grep -i "{{ inventory_hostname }}" | awk -F',' '{print $1}' | awk '{print $2}' | head -1
+  delegate_to: "{{ wazuh_manager_ip }}"
+  register: existing_agent_id
+  become: yes
+  failed_when: false
+  changed_when: false
+  ignore_errors: yes
+  when: wazuh_remove_duplicate_agent | default(true)
+
+- name: "Xóa agent duplicate trên Manager (nếu tồn tại)"
+  ansible.builtin.shell: |
+    echo "y" | /var/ossec/bin/manage_agents -r {{ existing_agent_id.stdout }}
+  delegate_to: "{{ wazuh_manager_ip }}"
+  become: yes
+  when:
+    - wazuh_remove_duplicate_agent | default(true)
+    - existing_agent_id.stdout is defined
+    - existing_agent_id.stdout | length > 0
+  failed_when: false
+  changed_when: true
+
+- name: "Xóa client.keys cũ trên agent (nếu có)"
+  ansible.builtin.file:
+    path: /var/ossec/etc/client.keys
+    state: absent
+  become: yes
+  when: wazuh_remove_duplicate_agent | default(true)
+
 # ==================== REGISTER AGENT WITH MANAGER ====================
 - name: "Register agent using agent-auth"
   ansible.builtin.shell: |
@@ -91,6 +122,9 @@
   register: agent_auth_result
   failed_when: false
   changed_when: "'Valid key received' in agent_auth_result.stdout or 'Valid key created' in agent_auth_result.stdout"
+  retries: 3
+  delay: 5
+  until: agent_auth_result.rc == 0
 
 - name: "Debug agent-auth output"
   ansible.builtin.debug:

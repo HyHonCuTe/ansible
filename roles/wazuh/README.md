@@ -237,6 +237,40 @@ ansible-playbook -i inventory.ini playbooks/deploy_wazuh_agent.yml \
 
 ## 🔧 Troubleshooting
 
+### ⚠️ QUAN TRỌNG: Agent "Never connected" hoặc "Duplicate agent name"
+
+**Triệu chứng:**
+- Dashboard hiển thị agent với status "Never connected"
+- Logs hiện: `ERROR: Duplicate agent name: xxx (from manager)`
+
+**Nguyên nhân:**
+- Agent đã được đăng ký trên Manager nhưng key không khớp
+- Agent cũ chưa bị xóa trước khi deploy lại
+
+**Giải pháp tự động (đã tích hợp trong playbook):**
+- Playbook mới sẽ tự xóa agent duplicate trước khi register
+- Biến `wazuh_remove_duplicate_agent: true` (mặc định) sẽ kích hoạt
+
+**Giải pháp thủ công:**
+```bash
+# 1. Trên Manager - Xem danh sách agents
+sudo /var/ossec/bin/agent_control -l
+
+# 2. Xóa agent bị duplicate (thay ID)
+sudo /var/ossec/bin/manage_agents -r <AGENT_ID>
+# Nhập 'y' để xác nhận
+
+# 3. Restart Manager
+sudo systemctl restart wazuh-manager
+
+# 4. Trên Agent - Xóa key cũ và restart
+sudo rm -f /var/ossec/etc/client.keys
+sudo systemctl restart wazuh-agent
+
+# 5. Hoặc chạy lại playbook
+ansible-playbook playbooks/deploy_wazuh_agent.yml --limit <agent_name>
+```
+
 ### 1. Kiểm tra logs
 
 #### Wazuh Server

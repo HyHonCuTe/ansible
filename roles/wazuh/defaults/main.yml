@@ -69,3 +69,10 @@ wazuh_agent_service_macos: "com.wazuh.agent"
 wazuh_api_user: "wazuh-wui"
 wazuh_api_password: "MyS3cr37P450r.*-"
 wazuh_indexer_admin_password: "SecretPassword"
+
+# ==================== AGENT DEPLOYMENT OPTIONS ====================
+# Tự động xóa agent duplicate trên Manager trước khi register lại
+wazuh_remove_duplicate_agent: true
+
+# ==================== PATH CONFIGURATION ====================
+wazuh_agent_config_path_linux: "/var/ossec/etc/ossec.conf"
