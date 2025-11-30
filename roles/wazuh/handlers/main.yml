@@ -1,0 +1,64 @@
+---
+# File: roles/wazuh/handlers/main.yml
+# Mô tả: Định nghĩa các handlers để restart services
+
+# ==================== WAZUH MANAGER HANDLERS ====================
+- name: Restart wazuh-manager
+  ansible.builtin.systemd:
+    name: "{{ wazuh_manager_service }}"
+    state: restarted
+    enabled: yes
+  become: yes
+
+- name: Reload wazuh-manager
+  ansible.builtin.systemd:
+    name: "{{ wazuh_manager_service }}"
+    state: reloaded
+  become: yes
+
+# ==================== WAZUH INDEXER HANDLERS ====================
+- name: Restart wazuh-indexer
+  ansible.builtin.systemd:
+    name: "{{ wazuh_indexer_service }}"
+    state: restarted
+    enabled: yes
+  become: yes
+
+# ==================== WAZUH DASHBOARD HANDLERS ====================
+- name: Restart wazuh-dashboard
+  ansible.builtin.systemd:
+    name: "{{ wazuh_dashboard_service }}"
+    state: restarted
+    enabled: yes
+  become: yes
+
+# ==================== WAZUH AGENT LINUX HANDLERS ====================
+- name: Restart wazuh-agent
+  ansible.builtin.systemd:
+    name: "{{ wazuh_agent_service_linux }}"
+    state: restarted
+    enabled: yes
+  become: yes
+  when: ansible_os_family != "Windows"
+
+# ==================== WAZUH AGENT WINDOWS HANDLERS ====================
+- name: Restart wazuh-agent-windows
+  ansible.windows.win_service:
+    name: "{{ wazuh_agent_service_windows }}"
+    state: restarted
+    start_mode: auto
+  when: ansible_os_family == "Windows"
+
+# ==================== FIREWALL HANDLERS ====================
+- name: Reload firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    state: reloaded
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Reload ufw
+  community.general.ufw:
+    state: reloaded
+  become: yes
+  when: ansible_os_family == "Debian"

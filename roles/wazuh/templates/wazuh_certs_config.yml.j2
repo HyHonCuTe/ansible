@@ -1,0 +1,18 @@
+# File: roles/wazuh/templates/wazuh_certs_config.yml.j2
+# Certificate configuration for Wazuh components
+
+nodes:
+  # Wazuh indexer nodes
+  indexer:
+    - name: node-1
+      ip: {{ ansible_default_ipv4.address }}
+
+  # Wazuh server nodes
+  server:
+    - name: wazuh-1
+      ip: {{ ansible_default_ipv4.address }}
+
+  # Wazuh dashboard nodes
+  dashboard:
+    - name: dashboard
+      ip: {{ ansible_default_ipv4.address }}

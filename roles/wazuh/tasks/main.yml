@@ -1,0 +1,95 @@
+---
+# File: roles/wazuh/tasks/main.yml
+# Mô tả: Entry point cho Wazuh Role, điều hướng theo mode
+
+- name: "Hiển thị thông tin cấu hình Wazuh"
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║              WAZUH DEPLOYMENT CONFIGURATION                    ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      🖥️  Host:           {{ inventory_hostname }}
+      🐧 OS:             {{ ansible_distribution }} {{ ansible_distribution_version }}
+      🔧 Mode:           {{ wazuh_mode | upper }}
+      📦 Wazuh Version:  {{ wazuh_version }}
+      {% if wazuh_mode == "agent" %}
+      🎯 Manager IP:     {{ wazuh_manager_ip }}
+      👥 Agent Group:    {{ wazuh_agent_group }}
+      {% endif %}
+      
+      ═══════════════════════════════════════════════════════════════════
+
+- name: "Kiểm tra wazuh_mode hợp lệ"
+  ansible.builtin.fail:
+    msg: |
+      ❌ Lỗi: wazuh_mode phải là "server" hoặc "agent"
+      Giá trị hiện tại: {{ wazuh_mode }}
+  when: wazuh_mode not in ["server", "agent"]
+
+# ==================== WAZUH SERVER DEPLOYMENT ====================
+- name: "Include install_server.yml nếu mode = server"
+  ansible.builtin.include_tasks: install_server.yml
+  when: 
+    - wazuh_mode == "server"
+    - ansible_os_family != "Windows"
+    - ansible_os_family != "Darwin"
+
+# ==================== WAZUH AGENT DEPLOYMENT - LINUX ====================
+- name: "Include install_agent_linux.yml nếu mode = agent và OS là Linux"
+  ansible.builtin.include_tasks: install_agent_linux.yml
+  when:
+    - wazuh_mode == "agent"
+    - ansible_os_family in ["Debian", "RedHat", "Suse"]
+
+# ==================== WAZUH AGENT DEPLOYMENT - WINDOWS ====================
+- name: "Include install_agent_windows.yml nếu mode = agent và OS là Windows"
+  ansible.builtin.include_tasks: install_agent_windows.yml
+  when:
+    - wazuh_mode == "agent"
+    - ansible_os_family == "Windows"
+
+# ==================== WAZUH AGENT DEPLOYMENT - MACOS ====================
+- name: "Include install_agent_macos.yml nếu mode = agent và OS là macOS"
+  ansible.builtin.include_tasks: install_agent_macos.yml
+  when:
+    - wazuh_mode == "agent"
+    - ansible_os_family == "Darwin"
+
+# ==================== SUMMARY ====================
+- name: "Hiển thị thông báo hoàn tất"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║              ✅ WAZUH DEPLOYMENT COMPLETED                     ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      🖥️  Host:       {{ inventory_hostname }}
+      🔧 Mode:       {{ wazuh_mode | upper }}
+      ✅ Status:     Deployment successful
+      
+      {% if wazuh_mode == "server" %}
+      🌐 Access URLs:
+      ├─ Dashboard:  https://{{ ansible_default_ipv4.address | default(wazuh_manager_ip) }}:443
+      ├─ API:        https://{{ ansible_default_ipv4.address | default(wazuh_manager_ip) }}:55000
+      └─ Indexer:    https://{{ ansible_default_ipv4.address | default(wazuh_manager_ip) }}:9200
+      
+      📋 Default Credentials:
+      ├─ User:       {{ wazuh_api_user }}
+      └─ Password:   {{ wazuh_api_password }}
+      {% elif wazuh_mode == "agent" %}
+      🔗 Connected to Manager: {{ wazuh_manager_ip }}:{{ wazuh_manager_port }}
+      
+      📝 Verify agent status:
+      {% if ansible_os_family == "Windows" %}
+      Get-Service WazuhSvc
+      {% elif ansible_os_family == "Darwin" %}
+      sudo /Library/Ossec/bin/agent-control -l
+      {% else %}
+      sudo systemctl status wazuh-agent
+      sudo /var/ossec/bin/agent-control -l
+      {% endif %}
+      {% endif %}
+      
+      ═══════════════════════════════════════════════════════════════════

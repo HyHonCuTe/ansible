@@ -1,0 +1,127 @@
+---
+# File: roles/wazuh/tasks/install_agent_macos.yml
+# Mô tả: Cài đặt Wazuh Agent trên macOS
+
+# ==================== PREREQUISITES ====================
+- name: "Kiểm tra macOS version"
+  ansible.builtin.command: sw_vers -productVersion
+  register: macos_version
+  changed_when: false
+
+- name: "Hiển thị macOS version"
+  ansible.builtin.debug:
+    msg: "macOS Version: {{ macos_version.stdout }}"
+
+# ==================== DOWNLOAD WAZUH AGENT ====================
+- name: "Tạo thư mục tạm để download Wazuh Agent"
+  ansible.builtin.file:
+    path: /tmp/wazuh
+    state: directory
+    mode: '0755'
+
+- name: "Kiểm tra xem Wazuh Agent đã được cài đặt chưa"
+  ansible.builtin.stat:
+    path: "{{ wazuh_macos_install_path }}"
+  register: wazuh_installed
+
+- name: "Download Wazuh Agent PKG for macOS"
+  ansible.builtin.get_url:
+    url: "{{ wazuh_macos_agent_url }}"
+    dest: /tmp/wazuh/wazuh-agent.pkg
+    mode: '0644'
+  when: not wazuh_installed.stat.exists
+
+# ==================== INSTALL WAZUH AGENT ====================
+- name: "Cài đặt Wazuh Agent trên macOS"
+  ansible.builtin.command: >
+    installer -pkg /tmp/wazuh/wazuh-agent.pkg
+    -target /
+  become: yes
+  register: install_result
+  changed_when: install_result.rc == 0
+  when: not wazuh_installed.stat.exists
+
+# ==================== CONFIGURE WAZUH AGENT ====================
+- name: "Deploy Wazuh Agent configuration"
+  ansible.builtin.template:
+    src: wazuh_agent_macos_ossec.conf.j2
+    dest: "{{ wazuh_agent_config_path_macos }}"
+    owner: root
+    group: wheel
+    mode: '0640'
+  become: yes
+
+- name: "Cấu hình Wazuh Manager IP"
+  ansible.builtin.lineinfile:
+    path: "{{ wazuh_agent_config_path_macos }}"
+    regexp: '<address>.*</address>'
+    line: "    <address>{{ wazuh_manager_ip }}</address>"
+    state: present
+  become: yes
+
+# ==================== START WAZUH AGENT ====================
+- name: "Load Wazuh Agent LaunchDaemon"
+  ansible.builtin.command: launchctl load /Library/LaunchDaemons/com.wazuh.agent.plist
+  become: yes
+  changed_when: false
+  failed_when: false
+
+- name: "Start Wazuh Agent service"
+  ansible.builtin.command: "{{ wazuh_macos_install_path }}/bin/wazuh-control start"
+  become: yes
+  register: start_result
+  changed_when: "'Starting' in start_result.stdout"
+
+# ==================== VERIFY INSTALLATION ====================
+- name: "Chờ Wazuh Agent kết nối với Manager"
+  ansible.builtin.wait_for:
+    timeout: 30
+  delegate_to: localhost
+  become: false
+
+- name: "Kiểm tra trạng thái Wazuh Agent"
+  ansible.builtin.command: "{{ wazuh_macos_install_path }}/bin/wazuh-control status"
+  register: agent_status
+  changed_when: false
+  become: yes
+
+- name: "Lấy thông tin Agent keys"
+  ansible.builtin.command: cat {{ wazuh_macos_install_path }}/etc/client.keys
+  register: agent_keys
+  changed_when: false
+  failed_when: false
+  become: yes
+
+- name: "Hiển thị thông tin Wazuh Agent trên macOS"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║         ✅ WAZUH AGENT (macOS) INSTALLATION COMPLETED          ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      🖥️  Host:           {{ inventory_hostname }}
+      🍎 OS:             macOS {{ macos_version.stdout }}
+      📦 Agent Name:     {{ wazuh_agent_name }}
+      👥 Agent Group:    {{ wazuh_agent_group }}
+      
+      🔗 Connection:
+      ├─ Manager IP:     {{ wazuh_manager_ip }}
+      ├─ Manager Port:   {{ wazuh_manager_port }}
+      └─ Protocol:       {{ wazuh_manager_protocol | upper }}
+      
+      ✅ Service Status:  {{ 'Running' if 'running' in agent_status.stdout else 'Stopped' }}
+      
+      📋 Verify Commands:
+      ├─ Status:         sudo {{ wazuh_macos_install_path }}/bin/wazuh-control status
+      ├─ Logs:           sudo tail -f {{ wazuh_macos_install_path }}/logs/ossec.log
+      ├─ Agent Info:     sudo {{ wazuh_macos_install_path }}/bin/agent-control -l
+      └─ Config:         sudo cat {{ wazuh_agent_config_path_macos }}
+      
+      ═══════════════════════════════════════════════════════════════════
+
+# ==================== CLEANUP ====================
+- name: "Xóa file PKG tạm"
+  ansible.builtin.file:
+    path: /tmp/wazuh
+    state: absent

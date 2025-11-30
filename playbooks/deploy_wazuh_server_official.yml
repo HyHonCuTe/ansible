@@ -1,0 +1,314 @@
+---
+# File: playbooks/deploy_wazuh_server_official.yml
+# Mô tả: Deploy Wazuh Server sử dụng Official Installation Script từ Wazuh
+# Phương pháp: Download và chạy wazuh-install.sh (production-ready)
+
+- name: Deploy Wazuh Server using Official Script
+  hosts: wazuh_server
+  become: yes
+  gather_facts: yes
+
+  vars:
+    wazuh_version: "4.7"
+    wazuh_script_url: "https://packages.wazuh.com/{{ wazuh_version }}/wazuh-install.sh"
+    wazuh_install_dir: "/tmp/wazuh-installation"
+    wazuh_save_credentials: true
+
+  tasks:
+    - name: "📊 Pre-check: Hiển thị thông tin deployment"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║       🚀 WAZUH SERVER OFFICIAL INSTALLATION                    ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          📋 Deployment Information:
+          ├─ Target Host:    {{ ansible_hostname }}
+          ├─ IP Address:     {{ ansible_default_ipv4.address }}
+          ├─ OS:             {{ ansible_distribution }} {{ ansible_distribution_version }}
+          ├─ Method:         Official Wazuh Installation Script
+          └─ Wazuh Version:  {{ wazuh_version }}
+          
+          📦 Components to Install:
+          ├─ ✓ Wazuh Indexer (OpenSearch)
+          ├─ ✓ Wazuh Manager
+          ├─ ✓ Filebeat
+          └─ ✓ Wazuh Dashboard
+          
+          ⏱️  Estimated Time: 10-15 minutes
+          
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "🔍 Pre-check: Kiểm tra RAM (minimum 4GB)"
+      ansible.builtin.assert:
+        that:
+          - ansible_memtotal_mb >= 3800
+        fail_msg: |
+          ❌ ERROR: Insufficient RAM
+          Required: 4GB (4096MB)
+          Available: {{ ansible_memtotal_mb }}MB
+          
+          Wazuh Indexer requires at least 4GB RAM to run properly.
+        success_msg: "✅ RAM check passed: {{ ansible_memtotal_mb }}MB available"
+
+    - name: "🔍 Pre-check: Kiểm tra Disk Space (minimum 20GB free)"
+      ansible.builtin.shell: df -BG / | tail -1 | awk '{print $4}' | sed 's/G//'
+      register: disk_free
+      changed_when: false
+
+    - name: "🔍 Pre-check: Cảnh báo nếu disk space thấp"
+      ansible.builtin.debug:
+        msg: |
+          ⚠️  WARNING: Low disk space
+          Available: {{ disk_free.stdout }}GB
+          Recommended: At least 20GB free
+      when: disk_free.stdout | int < 20
+
+    - name: "🔍 Pre-check: Kiểm tra các services đang chạy"
+      ansible.builtin.shell: systemctl is-active {{ item }} 2>/dev/null || echo 'inactive'
+      loop:
+        - wazuh-manager
+        - wazuh-indexer
+        - wazuh-dashboard
+      register: existing_services
+      changed_when: false
+      failed_when: false
+
+    - name: "⚠️  Cảnh báo: Wazuh đã được cài đặt"
+      ansible.builtin.debug:
+        msg: |
+          ⚠️  WARNING: Wazuh services already exist
+          
+          Detected services:
+          {% for service in existing_services.results %}
+          - {{ service.item }}: {{ service.stdout }}
+          {% endfor %}
+          
+          Recommendation:
+          1. Backup current data if needed
+          2. Run cleanup playbook:
+             ansible-playbook -i inventory.ini playbooks/cleanup_wazuh_server.yml
+          3. Then run this playbook again
+          
+          The script will fail if services are already installed.
+      when: existing_services.results | selectattr('stdout', 'equalto', 'active') | list | length > 0
+
+    - name: "📦 Install required dependencies"
+      ansible.builtin.package:
+        name:
+          - curl
+          - tar
+          - gnupg
+        state: present
+
+    - name: "📁 Create installation directory"
+      ansible.builtin.file:
+        path: "{{ wazuh_install_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: "⬇️  Download Wazuh Official Installation Script"
+      ansible.builtin.get_url:
+        url: "{{ wazuh_script_url }}"
+        dest: "{{ wazuh_install_dir }}/wazuh-install.sh"
+        mode: '0755'
+        timeout: 300
+      register: script_download
+
+    - name: "📄 Verify script downloaded"
+      ansible.builtin.stat:
+        path: "{{ wazuh_install_dir }}/wazuh-install.sh"
+      register: script_file
+
+    - name: "❌ Fail if script not downloaded"
+      ansible.builtin.fail:
+        msg: |
+          Failed to download Wazuh installation script
+          URL: {{ wazuh_script_url }}
+          Check internet connection and URL validity.
+      when: not script_file.stat.exists
+
+    - name: "🚀 Run Wazuh Installation Script (All-in-One)"
+      ansible.builtin.shell: |
+        cd {{ wazuh_install_dir }}
+        bash wazuh-install.sh -a -i 2>&1 | tee wazuh-install.log
+      args:
+        creates: /var/ossec/bin/wazuh-control
+      register: wazuh_install
+      async: 1800  # 30 minutes timeout
+      poll: 30     # Check every 30 seconds
+
+    - name: "💾 Save installation output"
+      ansible.builtin.copy:
+        content: "{{ wazuh_install.stdout }}"
+        dest: "{{ wazuh_install_dir }}/wazuh-install-output.txt"
+        mode: '0600'
+      when: wazuh_install.stdout is defined
+
+    - name: "🔑 Extract credentials from installation output"
+      ansible.builtin.shell: |
+        grep -A 10 "credentials" {{ wazuh_install_dir }}/wazuh-install.log | tail -5
+      register: credentials_output
+      changed_when: false
+      failed_when: false
+
+    - name: "⏳ Wait for services to stabilize (60 seconds)"
+      ansible.builtin.pause:
+        seconds: 60
+
+    - name: "✅ Verify Wazuh Manager service"
+      ansible.builtin.systemd:
+        name: wazuh-manager
+      register: manager_status
+
+    - name: "✅ Verify Wazuh Indexer service"
+      ansible.builtin.systemd:
+        name: wazuh-indexer
+      register: indexer_status
+
+    - name: "✅ Verify Wazuh Dashboard service"
+      ansible.builtin.systemd:
+        name: wazuh-dashboard
+      register: dashboard_status
+
+    - name: "✅ Verify Filebeat service"
+      ansible.builtin.systemd:
+        name: filebeat
+      register: filebeat_status
+
+    - name: "🔥 Configure firewall ports"
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - 1514/udp   # Agent communication
+        - 1515/tcp   # Agent enrollment
+        - 55000/tcp  # Wazuh API
+        - 443/tcp    # Dashboard HTTPS
+        - 9200/tcp   # Indexer (optional, for debugging)
+      when: 
+        - ansible_os_family == "RedHat"
+        - ansible_facts.services['firewalld.service'] is defined
+        - ansible_facts.services['firewalld.service'].state == 'running'
+      failed_when: false
+
+    - name: "🌐 Get Wazuh Dashboard URL"
+      ansible.builtin.set_fact:
+        dashboard_url: "https://{{ ansible_default_ipv4.address }}"
+
+    - name: "🔍 Test Dashboard accessibility"
+      ansible.builtin.uri:
+        url: "{{ dashboard_url }}"
+        method: GET
+        validate_certs: no
+        status_code: [200, 401, 302]
+        timeout: 30
+      register: dashboard_test
+      failed_when: false
+      retries: 5
+      delay: 10
+
+    - name: "🔍 Test Wazuh API"
+      ansible.builtin.uri:
+        url: "https://{{ ansible_default_ipv4.address }}:55000"
+        method: GET
+        validate_certs: no
+        status_code: [200, 401]
+        timeout: 10
+      register: api_test
+      failed_when: false
+
+    - name: "📊 Display Installation Summary"
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║         ✅ WAZUH SERVER INSTALLATION COMPLETED                 ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          📊 Service Status:
+          ├─ Wazuh Manager:   {{ '✅ Running' if manager_status.status.ActiveState == 'active' else '❌ Stopped' }}
+          ├─ Wazuh Indexer:   {{ '✅ Running' if indexer_status.status.ActiveState == 'active' else '❌ Stopped' }}
+          ├─ Wazuh Dashboard: {{ '✅ Running' if dashboard_status.status.ActiveState == 'active' else '❌ Stopped' }}
+          └─ Filebeat:        {{ '✅ Running' if filebeat_status.status.ActiveState == 'active' else '❌ Stopped' }}
+          
+          🌐 Access Information:
+          ├─ Dashboard URL:  {{ dashboard_url }}
+          ├─ API Endpoint:   https://{{ ansible_default_ipv4.address }}:55000
+          └─ Manager IP:     {{ ansible_default_ipv4.address }}
+          
+          🔐 Credentials:
+          {{ credentials_output.stdout if credentials_output.stdout is defined else 'Check installation log for credentials' }}
+          
+          📁 Installation Files:
+          ├─ Installation Log:    {{ wazuh_install_dir }}/wazuh-install.log
+          ├─ Installation Output: {{ wazuh_install_dir }}/wazuh-install-output.txt
+          └─ Credentials saved in these files
+          
+          ⚠️  IMPORTANT NEXT STEPS:
+          1. Save your credentials from the log files above
+          2. Change default passwords immediately
+          3. Access dashboard: {{ dashboard_url }}
+          4. Deploy agents using:
+             ansible-playbook -i inventory.ini playbooks/deploy_wazuh_agent.yml
+          
+          🔧 Useful Commands:
+          # View credentials again:
+          sudo cat {{ wazuh_install_dir }}/wazuh-install.log | grep -A 10 "credentials"
+          
+          # Check services:
+          sudo systemctl status wazuh-manager wazuh-indexer wazuh-dashboard
+          
+          # View logs:
+          sudo tail -f /var/ossec/logs/ossec.log
+          sudo journalctl -fu wazuh-manager.service
+          
+          # List agents:
+          sudo /var/ossec/bin/agent_control -l
+          
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "💾 Save credentials to local file"
+      ansible.builtin.copy:
+        content: |
+          WAZUH SERVER CREDENTIALS
+          ========================
+          Generated: {{ ansible_date_time.iso8601 }}
+          Server IP: {{ ansible_default_ipv4.address }}
+          Dashboard: {{ dashboard_url }}
+          
+          {{ credentials_output.stdout if credentials_output.stdout is defined else 'See installation log' }}
+          
+          Full installation log: {{ wazuh_install_dir }}/wazuh-install.log
+        dest: "{{ wazuh_install_dir }}/WAZUH_CREDENTIALS.txt"
+        mode: '0600'
+      when: wazuh_save_credentials | bool
+
+    - name: "📥 Fetch credentials to Ansible control node"
+      ansible.builtin.fetch:
+        src: "{{ wazuh_install_dir }}/WAZUH_CREDENTIALS.txt"
+        dest: "./wazuh-credentials-{{ ansible_hostname }}.txt"
+        flat: yes
+      when: wazuh_save_credentials | bool
+
+    - name: "✅ Installation Complete - Summary"
+      ansible.builtin.debug:
+        msg: |
+          
+          🎉 Wazuh Server installation completed successfully!
+          
+          📋 Next Steps:
+          1. Credentials saved to: ./wazuh-credentials-{{ ansible_hostname }}.txt
+          2. Login to Dashboard: {{ dashboard_url }}
+          3. Deploy Agents: ansible-playbook -i inventory.ini playbooks/deploy_wazuh_agent.yml
+          
+          📚 Documentation:
+          - Official Docs: https://documentation.wazuh.com/
+          - Agent Deployment: See playbooks/deploy_wazuh_agent.yml
+          
+          🔒 Security:
+          - Change default passwords immediately
+          - Review firewall rules
+          - Enable 2FA if needed

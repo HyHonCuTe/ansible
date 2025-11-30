@@ -1,0 +1,71 @@
+---
+# File: roles/wazuh/defaults/main.yml
+# Mô tả: Định nghĩa các biến mặc định cho Wazuh Role
+
+# ==================== MODE CONFIGURATION ====================
+# Chọn mode: "server" hoặc "agent"
+wazuh_mode: "agent"
+
+# ==================== WAZUH VERSION ====================
+wazuh_version: "4.7"
+wazuh_major_version: "4.x"
+
+# ==================== WAZUH SERVER CONFIGURATION ====================
+wazuh_manager_ip: "127.0.0.1"
+wazuh_manager_port: 1514
+wazuh_manager_protocol: "udp"
+
+# ==================== WAZUH AGENT CONFIGURATION ====================
+wazuh_agent_name: "{{ ansible_hostname }}"
+wazuh_agent_group: "default"
+
+# ==================== REPOSITORY CONFIGURATION ====================
+wazuh_repo_gpg_key: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+wazuh_repo_apt: "deb https://packages.wazuh.com/4.x/apt/ stable main"
+wazuh_repo_yum: "https://packages.wazuh.com/4.x/yum/"
+
+# ==================== INDEXER CONFIGURATION ====================
+wazuh_indexer_http_port: 9200
+wazuh_indexer_transport_port: 9300
+wazuh_indexer_performance_analyzer_port: 9600
+
+# ==================== DASHBOARD CONFIGURATION ====================
+wazuh_dashboard_port: 443
+wazuh_dashboard_server_host: "0.0.0.0"
+
+# ==================== FIREWALL CONFIGURATION ====================
+wazuh_firewall_enabled: true
+wazuh_firewall_ports:
+  - "1514/udp"
+  - "1515/tcp"
+  - "55000/tcp"
+
+wazuh_indexer_firewall_ports:
+  - "9200/tcp"
+  - "9300/tcp"
+  - "9600/tcp"
+
+wazuh_dashboard_firewall_ports:
+  - "443/tcp"
+  - "5601/tcp"
+
+# ==================== WINDOWS AGENT CONFIGURATION ====================
+wazuh_windows_agent_url: "https://packages.wazuh.com/4.x/windows/wazuh-agent-{{ wazuh_version }}.0-1.msi"
+wazuh_windows_install_path: "C:\\Program Files (x86)\\ossec-agent"
+
+# ==================== MACOS AGENT CONFIGURATION ====================
+wazuh_macos_agent_url: "https://packages.wazuh.com/4.x/macos/wazuh-agent-{{ wazuh_version }}.0-1.pkg"
+wazuh_macos_install_path: "/Library/Ossec"
+
+# ==================== SERVICE NAMES ====================
+wazuh_manager_service: "wazuh-manager"
+wazuh_indexer_service: "wazuh-indexer"
+wazuh_dashboard_service: "wazuh-dashboard"
+wazuh_agent_service_linux: "wazuh-agent"
+wazuh_agent_service_windows: "WazuhSvc"
+wazuh_agent_service_macos: "com.wazuh.agent"
+
+# ==================== SECURITY ====================
+wazuh_api_user: "wazuh-wui"
+wazuh_api_password: "MyS3cr37P450r.*-"
+wazuh_indexer_admin_password: "SecretPassword"

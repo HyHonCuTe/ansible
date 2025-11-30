@@ -1,0 +1,125 @@
+---
+# File: playbooks/deploy_wazuh_server.yml
+# Mô tả: Playbook triển khai Wazuh Server (Manager + Indexer + Dashboard)
+
+- name: Deploy Wazuh Server
+  hosts: wazuh_server
+  become: yes
+  gather_facts: yes
+
+  vars:
+    wazuh_mode: "server"
+    wazuh_manager_ip: "{{ ansible_default_ipv4.address }}"
+    wazuh_version: "4.7"
+    wazuh_firewall_enabled: true
+
+  pre_tasks:
+    - name: "Pre-check: Hiển thị thông tin deployment"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║          🚀 WAZUH SERVER DEPLOYMENT STARTING                   ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          📋 Deployment Information:
+          ├─ Target Host:    {{ inventory_hostname }}
+          ├─ IP Address:     {{ ansible_default_ipv4.address }}
+          ├─ OS:             {{ ansible_distribution }} {{ ansible_distribution_version }}
+          ├─ Mode:           SERVER
+          └─ Wazuh Version:  {{ wazuh_version }}
+          
+          📦 Components to Install:
+          ├─ ✓ Wazuh Manager
+          ├─ ✓ Wazuh Indexer
+          └─ ✓ Wazuh Dashboard
+          
+          ⏱️  Estimated Time: 10-15 minutes
+          
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "Pre-check: Kiểm tra kết nối internet"
+      ansible.builtin.uri:
+        url: https://packages.wazuh.com
+        method: HEAD
+        timeout: 10
+      register: internet_check
+      failed_when: false
+
+    - name: "Pre-check: Cảnh báo nếu không có kết nối internet"
+      ansible.builtin.debug:
+        msg: "⚠️  WARNING: Không thể kết nối đến Wazuh repository. Kiểm tra kết nối internet!"
+      when: internet_check.status is not defined or internet_check.status != 200
+
+    - name: "Pre-check: Kiểm tra disk space"
+      ansible.builtin.shell: df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage
+      changed_when: false
+
+    - name: "Pre-check: Cảnh báo nếu disk space thấp"
+      ansible.builtin.debug:
+        msg: "⚠️  WARNING: Disk usage is {{ disk_usage.stdout }}%. Recommend at least 20GB free space."
+      when: disk_usage.stdout | int > 80
+
+    - name: "Pre-check: Kiểm tra RAM available"
+      ansible.builtin.shell: free -m | grep Mem | awk '{print $2}'
+      register: total_ram
+      changed_when: false
+
+    - name: "Pre-check: Cảnh báo nếu RAM thấp"
+      ansible.builtin.debug:
+        msg: "⚠️  WARNING: Total RAM is {{ total_ram.stdout }}MB. Wazuh Server recommends at least 4GB RAM."
+      when: total_ram.stdout | int < 4096
+
+  roles:
+    - role: wazuh
+
+  post_tasks:
+    - name: "Post-check: Verify Wazuh services"
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+      register: service_status
+      loop:
+        - wazuh-manager
+        - wazuh-indexer
+        - wazuh-dashboard
+      failed_when: false
+
+    - name: "Post-check: Hiển thị kết quả deployment"
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║       ✅ WAZUH SERVER DEPLOYMENT COMPLETED SUCCESSFULLY        ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          🌐 Access Information:
+          ├─ Dashboard URL:  https://{{ ansible_default_ipv4.address }}:443
+          ├─ API URL:        https://{{ ansible_default_ipv4.address }}:55000
+          └─ Indexer URL:    https://{{ ansible_default_ipv4.address }}:9200
+          
+          🔐 Default Credentials:
+          ├─ Username:   wazuh-wui
+          └─ Password:   MyS3cr37P450r.*-
+          
+          ⚠️  IMPORTANT SECURITY STEPS:
+          1. Change default passwords immediately
+          2. Configure SSL certificates for production
+          3. Review firewall rules
+          4. Set up backup procedures
+          
+          📝 Next Steps:
+          1. Access the dashboard: https://{{ ansible_default_ipv4.address }}
+          2. Deploy agents using: ansible-playbook playbooks/deploy_wazuh_agent.yml
+          3. Review logs: sudo tail -f /var/ossec/logs/ossec.log
+          
+          ═══════════════════════════════════════════════════════════════════
+
+  handlers:
+    - name: Restart wazuh services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - wazuh-manager
+        - wazuh-indexer
+        - wazuh-dashboard

@@ -1,0 +1,28 @@
+---
+# File: roles/wazuh/vars/main.yml
+# Mô tả: Các biến bổ sung cho Wazuh Role
+
+# ==================== OS-SPECIFIC PACKAGE NAMES ====================
+wazuh_server_packages:
+  - wazuh-manager
+  - wazuh-indexer
+  - wazuh-dashboard
+
+wazuh_agent_packages_debian:
+  - wazuh-agent
+
+wazuh_agent_packages_redhat:
+  - wazuh-agent
+
+# ==================== PATHS ====================
+wazuh_manager_config_path: "/var/ossec/etc/ossec.conf"
+wazuh_agent_config_path_linux: "/var/ossec/etc/ossec.conf"
+wazuh_agent_config_path_windows: "C:\\Program Files (x86)\\ossec-agent\\ossec.conf"
+wazuh_agent_config_path_macos: "/Library/Ossec/etc/ossec.conf"
+
+wazuh_indexer_config_path: "/etc/wazuh-indexer/opensearch.yml"
+wazuh_dashboard_config_path: "/etc/wazuh-dashboard/opensearch_dashboards.yml"
+
+# ==================== REPOSITORY URLS ====================
+wazuh_apt_repo_url: "https://packages.wazuh.com/4.x/apt/"
+wazuh_yum_repo_url: "https://packages.wazuh.com/4.x/yum/"

@@ -1,0 +1,41 @@
+---
+# File: roles/wazuh/meta/main.yml
+# Mô tả: Metadata cho Wazuh Role
+
+galaxy_info:
+  author: Server Ansible Team
+  description: Ansible Role for deploying Wazuh Server and Agents across multiple platforms
+  company: Your Company
+  license: MIT
+  min_ansible_version: "2.10"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+    - name: EL
+      versions:
+        - 8
+        - 9
+    - name: Windows
+      versions:
+        - 2019
+        - 2022
+    - name: MacOSX
+      versions:
+        - all
+  
+  galaxy_tags:
+    - security
+    - monitoring
+    - wazuh
+    - siem
+    - ids
+    - compliance
+
+dependencies: []

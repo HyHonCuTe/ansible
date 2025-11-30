@@ -1,0 +1,173 @@
+---
+# File: roles/wazuh/tasks/install_agent_linux.yml
+# Mô tả: Cài đặt Wazuh Agent trên Linux (Ubuntu, Debian, CentOS, RHEL, Rocky, AlmaLinux)
+
+# ==================== PREREQUISITES ====================
+- name: "Cài đặt các gói phụ thuộc (Debian/Ubuntu)"
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - apt-transport-https
+      - curl
+      - lsb-release
+    state: present
+    update_cache: yes
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Cài đặt các gói phụ thuộc (RedHat/CentOS)"
+  ansible.builtin.yum:
+    name:
+      - curl
+      - gnupg
+      - yum-utils
+    state: present
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+# ==================== ADD WAZUH REPOSITORY ====================
+- name: "Thêm Wazuh GPG key (Debian/Ubuntu)"
+  ansible.builtin.apt_key:
+    url: "{{ wazuh_repo_gpg_key }}"
+    state: present
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Thêm Wazuh repository (Debian/Ubuntu)"
+  ansible.builtin.apt_repository:
+    repo: "{{ wazuh_repo_apt }}"
+    state: present
+    filename: wazuh
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Thêm Wazuh GPG key (RedHat/CentOS)"
+  ansible.builtin.rpm_key:
+    key: "{{ wazuh_repo_gpg_key }}"
+    state: present
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: "Thêm Wazuh repository (RedHat/CentOS)"
+  ansible.builtin.yum_repository:
+    name: wazuh
+    description: Wazuh repository
+    baseurl: "{{ wazuh_repo_yum }}"
+    gpgcheck: yes
+    gpgkey: "{{ wazuh_repo_gpg_key }}"
+    enabled: yes
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+# ==================== INSTALL WAZUH AGENT ====================
+- name: "Cài đặt Wazuh Agent (Debian/Ubuntu)"
+  ansible.builtin.apt:
+    name: wazuh-agent
+    state: present
+    update_cache: yes
+  become: yes
+  when: ansible_os_family == "Debian"
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+    WAZUH_AGENT_GROUP: "{{ wazuh_agent_group }}"
+    WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
+
+- name: "Cài đặt Wazuh Agent (RedHat/CentOS)"
+  ansible.builtin.yum:
+    name: wazuh-agent
+    state: present
+  become: yes
+  when: ansible_os_family == "RedHat"
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+    WAZUH_AGENT_GROUP: "{{ wazuh_agent_group }}"
+    WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
+
+# ==================== CONFIGURE WAZUH AGENT ====================
+- name: "Deploy Wazuh Agent configuration"
+  ansible.builtin.template:
+    src: wazuh_agent_linux_ossec.conf.j2
+    dest: "{{ wazuh_agent_config_path_linux }}"
+    owner: root
+    group: wazuh
+    mode: '0640'
+  become: yes
+  notify: Restart wazuh-agent
+
+# ==================== CONFIGURE SELINUX (RHEL/CENTOS) ====================
+- name: "Kiểm tra SELinux status"
+  ansible.builtin.command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == "RedHat"
+
+- name: "Configure SELinux cho Wazuh Agent"
+  ansible.posix.seboolean:
+    name: "{{ item }}"
+    state: yes
+    persistent: yes
+  loop:
+    - use_nfs_home_dirs
+    - virt_use_nfs
+  become: yes
+  when:
+    - ansible_os_family == "RedHat"
+    - selinux_status.stdout == "Enforcing"
+  failed_when: false
+
+# ==================== START WAZUH AGENT ====================
+- name: "Enable và start Wazuh Agent"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_agent_service_linux }}"
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+# ==================== VERIFY INSTALLATION ====================
+- name: "Chờ Wazuh Agent kết nối với Manager"
+  ansible.builtin.wait_for:
+    timeout: 30
+  delegate_to: localhost
+  become: false
+
+- name: "Kiểm tra trạng thái Wazuh Agent"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_agent_service_linux }}"
+  register: wazuh_agent_status
+  become: yes
+
+- name: "Lấy thông tin Agent ID"
+  ansible.builtin.command: /var/ossec/bin/agent-control -l
+  register: agent_info
+  changed_when: false
+  failed_when: false
+  become: yes
+
+- name: "Hiển thị thông tin Wazuh Agent"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║           ✅ WAZUH AGENT INSTALLATION COMPLETED                ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      🖥️  Host:           {{ inventory_hostname }}
+      🐧 OS:             {{ ansible_distribution }} {{ ansible_distribution_version }}
+      📦 Agent Name:     {{ wazuh_agent_name }}
+      👥 Agent Group:    {{ wazuh_agent_group }}
+      
+      🔗 Connection:
+      ├─ Manager IP:     {{ wazuh_manager_ip }}
+      ├─ Manager Port:   {{ wazuh_manager_port }}
+      └─ Protocol:       {{ wazuh_manager_protocol | upper }}
+      
+      ✅ Service Status:  {{ 'Running' if wazuh_agent_status.status.ActiveState == 'active' else 'Stopped' }}
+      
+      📋 Verify Commands:
+      ├─ Status:         sudo systemctl status {{ wazuh_agent_service_linux }}
+      ├─ Logs:           sudo tail -f /var/ossec/logs/ossec.log
+      └─ Agent Info:     sudo /var/ossec/bin/agent-control -l
+      
+      ═══════════════════════════════════════════════════════════════════

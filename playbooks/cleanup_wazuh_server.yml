@@ -1,0 +1,113 @@
+---
+# File: playbooks/cleanup_wazuh_server.yml
+# Mô tả: Dọn dẹp hoàn toàn Wazuh Server để cài lại từ đầu
+
+- name: Cleanup Wazuh Server Installation
+  hosts: wazuh_server
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: "⚠️  Cảnh báo: Sẽ xóa hoàn toàn Wazuh Server"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║          ⚠️  WAZUH SERVER CLEANUP WARNING                      ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          Sẽ XÓA HOÀN TOÀN:
+          ├─ Wazuh Manager
+          ├─ Wazuh Indexer
+          ├─ Wazuh Dashboard
+          ├─ Filebeat
+          ├─ Tất cả cấu hình
+          └─ Tất cả dữ liệu
+          
+          ⏱️  Đợi 10 giây để hủy (Ctrl+C)...
+          
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "Đợi 10 giây"
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: "Stop tất cả Wazuh services"
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - wazuh-manager
+        - wazuh-indexer
+        - wazuh-dashboard
+        - filebeat
+      failed_when: false
+
+    - name: "Disable tất cả Wazuh services"
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: no
+      loop:
+        - wazuh-manager
+        - wazuh-indexer
+        - wazuh-dashboard
+        - filebeat
+      failed_when: false
+
+    - name: "Gỡ cài đặt Wazuh packages"
+      ansible.builtin.package:
+        name:
+          - wazuh-manager
+          - wazuh-indexer
+          - wazuh-dashboard
+          - filebeat
+        state: absent
+      failed_when: false
+
+    - name: "Xóa thư mục Wazuh"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/ossec
+        - /etc/wazuh-indexer
+        - /var/lib/wazuh-indexer
+        - /usr/share/wazuh-indexer
+        - /etc/wazuh-dashboard
+        - /var/lib/wazuh-dashboard
+        - /usr/share/wazuh-dashboard
+        - /etc/filebeat
+        - /var/lib/filebeat
+        - /var/log/filebeat
+        - /etc/wazuh-certificates
+
+    - name: "Xóa Wazuh repository"
+      ansible.builtin.file:
+        path: /etc/yum.repos.d/wazuh.repo
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: "Xóa user và group"
+      ansible.builtin.user:
+        name: "{{ item }}"
+        state: absent
+        remove: yes
+      loop:
+        - wazuh
+        - wazuh-indexer
+        - wazuh-dashboard
+      failed_when: false
+
+    - name: "Hiển thị kết quả"
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║          ✅ WAZUH SERVER CLEANUP COMPLETED                     ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          ✅ Đã xóa hoàn toàn Wazuh Server
+          
+          📝 Bây giờ có thể cài lại:
+          ansible-playbook -i inventory.ini playbooks/deploy_wazuh_server.yml
+          
+          ═══════════════════════════════════════════════════════════════════

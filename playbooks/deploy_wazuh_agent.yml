@@ -1,0 +1,162 @@
+---
+# File: playbooks/deploy_wazuh_agent.yml
+# Mô tả: Playbook triển khai Wazuh Agent trên nhiều hệ điều hành
+
+- name: Deploy Wazuh Agent on Multiple OS
+  hosts: wazuh_agents
+  gather_facts: yes
+
+  vars:
+    wazuh_mode: "agent"
+    wazuh_manager_ip: "192.168.1.10"  # Thay đổi thành IP của Wazuh Manager
+    wazuh_agent_group: "default"
+    wazuh_version: "4.7"
+
+  pre_tasks:
+    - name: "Pre-check: Hiển thị thông tin deployment"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║          🚀 WAZUH AGENT DEPLOYMENT STARTING                    ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          📋 Agent Information:
+          ├─ Target Host:    {{ inventory_hostname }}
+          ├─ OS Family:      {{ ansible_os_family }}
+          ├─ OS:             {{ ansible_distribution | default('Unknown') }} {{ ansible_distribution_version | default('') }}
+          ├─ Mode:           AGENT
+          ├─ Agent Name:     {{ ansible_hostname }}
+          └─ Agent Group:    {{ wazuh_agent_group }}
+          
+          🔗 Manager Connection:
+          ├─ Manager IP:     {{ wazuh_manager_ip }}
+          └─ Manager Port:   1514/udp
+          
+          ⏱️  Estimated Time: 5-10 minutes
+          
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "Pre-check: Kiểm tra kết nối đến Wazuh Manager"
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_manager_ip }}"
+        port: 1514
+        timeout: 10
+      register: manager_check
+      failed_when: false
+      when: ansible_os_family != "Windows"
+
+    - name: "Pre-check: Cảnh báo nếu không kết nối được Manager"
+      ansible.builtin.debug:
+        msg: |
+          ⚠️  WARNING: Không thể kết nối đến Wazuh Manager {{ wazuh_manager_ip }}:1514
+          Vui lòng kiểm tra:
+          - Manager có đang chạy không?
+          - Firewall có mở port 1514/udp không?
+          - Network có kết nối được không?
+      when: 
+        - ansible_os_family != "Windows"
+        - manager_check.failed is defined
+        - manager_check.failed
+
+  roles:
+    - role: wazuh
+
+  post_tasks:
+    - name: "Post-check: Verify Agent service (Linux)"
+      ansible.builtin.systemd:
+        name: wazuh-agent
+      register: agent_status_linux
+      failed_when: false
+      when: ansible_os_family in ["Debian", "RedHat", "Suse"]
+
+    - name: "Post-check: Verify Agent service (Windows)"
+      ansible.windows.win_service:
+        name: WazuhSvc
+      register: agent_status_windows
+      failed_when: false
+      when: ansible_os_family == "Windows"
+
+    - name: "Post-check: Verify Agent service (macOS)"
+      ansible.builtin.command: "{{ wazuh_macos_install_path | default('/Library/Ossec') }}/bin/wazuh-control status"
+      register: agent_status_macos
+      failed_when: false
+      changed_when: false
+      when: ansible_os_family == "Darwin"
+
+    - name: "Post-check: Hiển thị kết quả deployment (Linux)"
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║       ✅ WAZUH AGENT DEPLOYMENT COMPLETED SUCCESSFULLY         ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          🖥️  Agent Information:
+          ├─ Host:           {{ inventory_hostname }}
+          ├─ OS:             {{ ansible_distribution }} {{ ansible_distribution_version }}
+          ├─ Agent Name:     {{ ansible_hostname }}
+          └─ Agent Group:    {{ wazuh_agent_group }}
+          
+          🔗 Connection:
+          ├─ Manager IP:     {{ wazuh_manager_ip }}
+          └─ Status:         {{ 'Connected' if agent_status_linux.status.ActiveState == 'active' else 'Not Running' }}
+          
+          📝 Verify Commands:
+          ├─ Status:         sudo systemctl status wazuh-agent
+          ├─ Logs:           sudo tail -f /var/ossec/logs/ossec.log
+          └─ Agent Info:     sudo /var/ossec/bin/agent-control -l
+          
+          ═══════════════════════════════════════════════════════════════════
+      when: ansible_os_family in ["Debian", "RedHat", "Suse"]
+
+    - name: "Post-check: Hiển thị kết quả deployment (Windows)"
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║       ✅ WAZUH AGENT DEPLOYMENT COMPLETED SUCCESSFULLY         ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          🖥️  Agent Information:
+          ├─ Host:           {{ inventory_hostname }}
+          ├─ OS:             Windows {{ ansible_distribution_version }}
+          ├─ Agent Name:     {{ ansible_hostname }}
+          └─ Agent Group:    {{ wazuh_agent_group }}
+          
+          🔗 Connection:
+          ├─ Manager IP:     {{ wazuh_manager_ip }}
+          └─ Status:         {{ 'Connected' if agent_status_windows.state == 'running' else 'Not Running' }}
+          
+          📝 Verify Commands (PowerShell):
+          ├─ Status:         Get-Service WazuhSvc
+          ├─ Logs:           Get-Content "C:\Program Files (x86)\ossec-agent\ossec.log" -Tail 50
+          └─ Config:         Get-Content "C:\Program Files (x86)\ossec-agent\ossec.conf"
+          
+          ═══════════════════════════════════════════════════════════════════
+      when: ansible_os_family == "Windows"
+
+    - name: "Post-check: Hiển thị kết quả deployment (macOS)"
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║       ✅ WAZUH AGENT DEPLOYMENT COMPLETED SUCCESSFULLY         ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          🖥️  Agent Information:
+          ├─ Host:           {{ inventory_hostname }}
+          ├─ OS:             macOS {{ ansible_distribution_version | default('Unknown') }}
+          ├─ Agent Name:     {{ ansible_hostname }}
+          └─ Agent Group:    {{ wazuh_agent_group }}
+          
+          🔗 Connection:
+          ├─ Manager IP:     {{ wazuh_manager_ip }}
+          └─ Status:         {{ 'Connected' if 'running' in agent_status_macos.stdout else 'Not Running' }}
+          
+          📝 Verify Commands:
+          ├─ Status:         sudo /Library/Ossec/bin/wazuh-control status
+          ├─ Logs:           sudo tail -f /Library/Ossec/logs/ossec.log
+          └─ Agent Info:     sudo /Library/Ossec/bin/agent-control -l
+          
+          ═══════════════════════════════════════════════════════════════════
+      when: ansible_os_family == "Darwin"

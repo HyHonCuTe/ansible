@@ -1,0 +1,47 @@
+# File: roles/wazuh/templates/wazuh_indexer_opensearch.yml.j2
+# Wazuh Indexer (OpenSearch) Configuration
+
+cluster.name: wazuh-cluster
+node.name: {{ ansible_hostname }}
+path.data: /var/lib/wazuh-indexer
+path.logs: /var/log/wazuh-indexer
+
+network.host: {{ ansible_default_ipv4.address | default('0.0.0.0') }}
+http.port: {{ wazuh_indexer_http_port }}
+transport.tcp.port: {{ wazuh_indexer_transport_port }}
+
+discovery.type: single-node
+
+# Security Configuration
+plugins.security.ssl.http.enabled: true
+plugins.security.ssl.http.pemcert_filepath: /etc/wazuh-indexer/certs/indexer.pem
+plugins.security.ssl.http.pemkey_filepath: /etc/wazuh-indexer/certs/indexer-key.pem
+plugins.security.ssl.http.pemtrustedcas_filepath: /etc/wazuh-indexer/certs/root-ca.pem
+
+plugins.security.ssl.transport.pemcert_filepath: /etc/wazuh-indexer/certs/indexer.pem
+plugins.security.ssl.transport.pemkey_filepath: /etc/wazuh-indexer/certs/indexer-key.pem
+plugins.security.ssl.transport.pemtrustedcas_filepath: /etc/wazuh-indexer/certs/root-ca.pem
+
+plugins.security.allow_unsafe_democertificates: true
+plugins.security.allow_default_init_securityindex: true
+
+plugins.security.nodes_dn:
+  - "CN={{ ansible_hostname }},OU=Wazuh,O=Wazuh,L=California,C=US"
+
+plugins.security.authcz.admin_dn:
+  - "CN=admin,OU=Wazuh,O=Wazuh,L=California,C=US"
+
+plugins.security.audit.type: internal_opensearch
+plugins.security.enable_snapshot_restore_privilege: true
+plugins.security.check_snapshot_restore_write_privileges: true
+plugins.security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
+
+cluster.routing.allocation.disk.threshold_enabled: false
+node.max_local_storage_nodes: 3
+
+# Performance Analyzer
+plugins.security.system_indices.enabled: true
+plugins.security.system_indices.indices: [".opendistro-alerting-config", ".opendistro-alerting-alert*", ".opendistro-anomaly-results*", ".opendistro-anomaly-detector*", ".opendistro-anomaly-checkpoints", ".opendistro-anomaly-detection-state", ".opendistro-reports-*", ".opendistro-notifications-*", ".opendistro-notebooks", ".opensearch-observability", ".opendistro-asynchronous-search-response*", ".replication-metadata-store"]
+
+# Memory settings (adjust based on system)
+bootstrap.memory_lock: true

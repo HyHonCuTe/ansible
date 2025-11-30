@@ -1,0 +1,139 @@
+---
+# File: roles/wazuh/tasks/install_agent_windows.yml
+# Mô tả: Cài đặt Wazuh Agent trên Windows Server
+
+# ==================== PREREQUISITES ====================
+- name: "Kiểm tra Windows PowerShell version"
+  ansible.windows.win_shell: $PSVersionTable.PSVersion.Major
+  register: ps_version
+  changed_when: false
+
+- name: "Hiển thị PowerShell version"
+  ansible.builtin.debug:
+    msg: "PowerShell Version: {{ ps_version.stdout | trim }}"
+
+# ==================== DOWNLOAD WAZUH AGENT ====================
+- name: "Tạo thư mục tạm để download Wazuh Agent"
+  ansible.windows.win_file:
+    path: C:\Temp
+    state: directory
+
+- name: "Kiểm tra xem Wazuh Agent đã được cài đặt chưa"
+  ansible.windows.win_service:
+    name: "{{ wazuh_agent_service_windows }}"
+  register: wazuh_service_check
+  failed_when: false
+
+- name: "Download Wazuh Agent MSI"
+  ansible.windows.win_get_url:
+    url: "{{ wazuh_windows_agent_url }}"
+    dest: C:\Temp\wazuh-agent.msi
+    force: no
+  when: wazuh_service_check.exists is not defined or not wazuh_service_check.exists
+
+# ==================== INSTALL WAZUH AGENT ====================
+- name: "Cài đặt Wazuh Agent trên Windows"
+  ansible.windows.win_package:
+    path: C:\Temp\wazuh-agent.msi
+    product_id: '{1E1B4F5D-8B6E-4D9A-A5C3-7F8E9A0B1C2D}'
+    arguments:
+      - /q
+      - WAZUH_MANAGER="{{ wazuh_manager_ip }}"
+      - WAZUH_AGENT_NAME="{{ wazuh_agent_name }}"
+      - WAZUH_REGISTRATION_SERVER="{{ wazuh_manager_ip }}"
+      - WAZUH_AGENT_GROUP="{{ wazuh_agent_group }}"
+    state: present
+  register: wazuh_install_result
+  when: wazuh_service_check.exists is not defined or not wazuh_service_check.exists
+
+# ==================== CONFIGURE WAZUH AGENT ====================
+- name: "Deploy Wazuh Agent configuration"
+  ansible.windows.win_template:
+    src: wazuh_agent_windows_ossec.conf.j2
+    dest: "{{ wazuh_agent_config_path_windows }}"
+  notify: Restart wazuh-agent-windows
+
+# ==================== CONFIGURE WINDOWS FIREWALL ====================
+- name: "Mở Windows Firewall cho Wazuh Agent (outbound)"
+  community.windows.win_firewall_rule:
+    name: Wazuh Agent Communication
+    localport: any
+    remoteport: "{{ wazuh_manager_port }}"
+    remoteip: "{{ wazuh_manager_ip }}"
+    protocol: "{{ wazuh_manager_protocol }}"
+    direction: out
+    action: allow
+    enabled: yes
+    state: present
+
+- name: "Mở Windows Firewall cho Wazuh Agent API"
+  community.windows.win_firewall_rule:
+    name: Wazuh Agent API
+    localport: any
+    remoteport: 1515
+    remoteip: "{{ wazuh_manager_ip }}"
+    protocol: tcp
+    direction: out
+    action: allow
+    enabled: yes
+    state: present
+
+# ==================== START WAZUH AGENT ====================
+- name: "Khởi động Wazuh Agent service"
+  ansible.windows.win_service:
+    name: "{{ wazuh_agent_service_windows }}"
+    start_mode: auto
+    state: started
+
+# ==================== VERIFY INSTALLATION ====================
+- name: "Chờ Wazuh Agent kết nối với Manager"
+  ansible.windows.win_shell: Start-Sleep -Seconds 30
+  changed_when: false
+
+- name: "Kiểm tra trạng thái Wazuh Agent service"
+  ansible.windows.win_service:
+    name: "{{ wazuh_agent_service_windows }}"
+  register: wazuh_agent_status
+
+- name: "Lấy thông tin Agent từ Windows"
+  ansible.windows.win_shell: |
+    if (Test-Path "{{ wazuh_windows_install_path }}\client.keys") {
+      Get-Content "{{ wazuh_windows_install_path }}\client.keys"
+    } else {
+      "Agent not registered yet"
+    }
+  register: agent_keys
+  changed_when: false
+
+- name: "Hiển thị thông tin Wazuh Agent trên Windows"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║        ✅ WAZUH AGENT (WINDOWS) INSTALLATION COMPLETED         ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      🖥️  Host:           {{ inventory_hostname }}
+      🪟 OS:             Windows {{ ansible_distribution_version }}
+      📦 Agent Name:     {{ wazuh_agent_name }}
+      👥 Agent Group:    {{ wazuh_agent_group }}
+      
+      🔗 Connection:
+      ├─ Manager IP:     {{ wazuh_manager_ip }}
+      ├─ Manager Port:   {{ wazuh_manager_port }}
+      └─ Protocol:       {{ wazuh_manager_protocol | upper }}
+      
+      ✅ Service Status:  {{ 'Running' if wazuh_agent_status.state == 'running' else 'Stopped' }}
+      
+      📋 Verify Commands (PowerShell):
+      ├─ Status:         Get-Service {{ wazuh_agent_service_windows }}
+      ├─ Logs:           Get-Content "{{ wazuh_windows_install_path }}\ossec.log" -Tail 50
+      └─ Config:         Get-Content "{{ wazuh_agent_config_path_windows }}"
+      
+      ═══════════════════════════════════════════════════════════════════
+
+# ==================== CLEANUP ====================
+- name: "Xóa file MSI tạm"
+  ansible.windows.win_file:
+    path: C:\Temp\wazuh-agent.msi
+    state: absent

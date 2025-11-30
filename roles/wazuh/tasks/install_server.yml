@@ -1,0 +1,667 @@
+---
+# File: roles/wazuh/tasks/install_server.yml
+# Mô tả: Cài đặt Wazuh Server (Manager + Indexer + Dashboard) với SSL certificates
+
+# ==================== PREREQUISITES ====================
+- name: "Cài đặt các gói phụ thuộc (Debian/Ubuntu)"
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - apt-transport-https
+      - curl
+      - lsb-release
+    state: present
+    update_cache: yes
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Cài đặt các gói phụ thuộc (RedHat/CentOS)"
+  ansible.builtin.yum:
+    name:
+      - curl
+      - gnupg
+      - yum-utils
+      - openssl
+      - tar
+    state: present
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+# ==================== ADD WAZUH REPOSITORY ====================
+- name: "Thêm Wazuh GPG key (Debian/Ubuntu)"
+  ansible.builtin.apt_key:
+    url: "{{ wazuh_repo_gpg_key }}"
+    state: present
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Thêm Wazuh repository (Debian/Ubuntu)"
+  ansible.builtin.apt_repository:
+    repo: "{{ wazuh_repo_apt }}"
+    state: present
+    filename: wazuh
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: "Thêm Wazuh GPG key (RedHat/CentOS)"
+  ansible.builtin.rpm_key:
+    key: "{{ wazuh_repo_gpg_key }}"
+    state: present
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: "Thêm Wazuh repository (RedHat/CentOS)"
+  ansible.builtin.yum_repository:
+    name: wazuh
+    description: Wazuh repository
+    baseurl: "{{ wazuh_repo_yum }}"
+    gpgcheck: yes
+    gpgkey: "{{ wazuh_repo_gpg_key }}"
+    enabled: yes
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+# ==================== GENERATE SSL CERTIFICATES ====================
+- name: "Tạo thư mục cho certificates"
+  ansible.builtin.file:
+    path: /etc/wazuh-certificates
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: "Download Wazuh certificate generation tool"
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/4.7/wazuh-certs-tool.sh
+    dest: /etc/wazuh-certificates/wazuh-certs-tool.sh
+    mode: '0755'
+  become: yes
+
+- name: "Tạo file cấu hình certificates"
+  ansible.builtin.copy:
+    content: |
+      nodes:
+        indexer:
+          - name: node-1
+            ip: {{ ansible_default_ipv4.address }}
+
+        server:
+          - name: wazuh-1
+            ip: {{ ansible_default_ipv4.address }}
+
+        dashboard:
+          - name: dashboard
+            ip: {{ ansible_default_ipv4.address }}
+    dest: /etc/wazuh-certificates/config.yml
+    mode: '0644'
+  become: yes
+
+- name: "Kiểm tra xem certificates đã tồn tại chưa"
+  ansible.builtin.stat:
+    path: /etc/wazuh-certificates/wazuh-certificates/root-ca.pem
+  register: certs_exist
+
+- name: "Generate Wazuh certificates"
+  ansible.builtin.shell: |
+    cd /etc/wazuh-certificates
+    bash wazuh-certs-tool.sh -A
+  become: yes
+  when: not certs_exist.stat.exists
+  register: cert_generation
+  changed_when: cert_generation.rc == 0
+
+# ==================== INSTALL WAZUH INDEXER ====================
+- name: "Cài đặt Wazuh Indexer"
+  ansible.builtin.package:
+    name: wazuh-indexer
+    state: present
+  become: yes
+
+- name: "Stop Wazuh Indexer (nếu đang chạy)"
+  ansible.builtin.systemd:
+    name: wazuh-indexer
+    state: stopped
+  become: yes
+  failed_when: false
+
+- name: "Tạo thư mục gốc Wazuh Indexer"
+  ansible.builtin.file:
+    path: /etc/wazuh-indexer
+    state: directory
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: '0750'
+  become: yes
+
+- name: "Tạo thư mục certificates cho Wazuh Indexer"
+  ansible.builtin.file:
+    path: /etc/wazuh-indexer/certs
+    state: directory
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: '0750'
+  become: yes
+
+- name: "Copy Indexer certificates"
+  ansible.builtin.copy:
+    src: "/etc/wazuh-certificates/wazuh-certificates/{{ item.src }}"
+    dest: "/etc/wazuh-indexer/certs/{{ item.dest }}"
+    remote_src: yes
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: '0600'
+  loop:
+    - { src: 'node-1.pem', dest: 'indexer.pem' }
+    - { src: 'node-1-key.pem', dest: 'indexer-key.pem' }
+    - { src: 'root-ca.pem', dest: 'root-ca.pem' }
+    - { src: 'admin.pem', dest: 'admin.pem' }
+    - { src: 'admin-key.pem', dest: 'admin-key.pem' }
+  become: yes
+
+- name: "Kiểm tra RAM available để set JVM heap"
+  ansible.builtin.shell: free -m | grep Mem | awk '{print int($2/2)}'
+  register: half_ram
+  changed_when: false
+
+- name: "Set JVM heap size (50% of RAM, max 4GB)"
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/jvm.options
+    regexp: '^-Xms'
+    line: "-Xms{{ [half_ram.stdout | int, 4096] | min }}m"
+    create: yes
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: '0660'
+  become: yes
+
+- name: "Set JVM max heap size"
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/jvm.options
+    regexp: '^-Xmx'
+    line: "-Xmx{{ [half_ram.stdout | int, 4096] | min }}m"
+    insertafter: '^-Xms'
+  become: yes
+
+- name: "Deploy Wazuh Indexer configuration"
+  ansible.builtin.template:
+    src: wazuh_indexer_opensearch.yml.j2
+    dest: /etc/wazuh-indexer/opensearch.yml
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: '0640'
+  become: yes
+
+- name: "Disable bootstrap memory lock (tránh lỗi mlockall)"
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: '^bootstrap.memory_lock:'
+    line: 'bootstrap.memory_lock: false'
+    state: present
+  become: yes
+
+- name: "Set network.host trong config"
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: '^network.host:'
+    line: 'network.host: 0.0.0.0'
+    state: present
+  become: yes
+
+- name: "Disable Performance Analyzer (fix AccessDeniedException)"
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: '^plugins.security.disabled:'
+    line: 'plugins.security.disabled: false'
+    state: present
+  become: yes
+
+- name: "Disable Performance Analyzer plugin"
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    line: 'opendistro_security.disabled: false'
+    insertafter: EOF
+  become: yes
+
+- name: "Tạo systemd override directory"
+  ansible.builtin.file:
+    path: /etc/systemd/system/wazuh-indexer.service.d
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: "Tăng timeout cho systemd service"
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      TimeoutStartSec=900
+      TimeoutStopSec=300
+    dest: /etc/systemd/system/wazuh-indexer.service.d/timeout.conf
+    mode: '0644'
+  become: yes
+
+- name: "Reload systemd daemon"
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: "Disable Performance Analyzer via environment variable"
+  ansible.builtin.lineinfile:
+    path: /etc/sysconfig/wazuh-indexer
+    line: 'OPENSEARCH_JAVA_OPTS="-Dopensearch.performanceanalyzer.enabled=false"'
+    create: yes
+    mode: '0644'
+  become: yes
+
+- name: "Enable và start Wazuh Indexer"
+  ansible.builtin.systemd:
+    name: wazuh-indexer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+- name: "Hiển thị thông báo đang chờ Indexer khởi động"
+  ansible.builtin.debug:
+    msg: |
+      ⏳ Đang chờ Wazuh Indexer khởi động...
+      Performance Analyzer đã được DISABLED để tránh lỗi.
+      Quá trình này có thể mất 5-10 phút tùy theo cấu hình server.
+      Đang chờ port 9200 mở...
+
+- name: "Chờ Wazuh Indexer khởi động hoàn tất"
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ wazuh_indexer_http_port }}"
+    delay: 45
+    timeout: 900
+    state: started
+  become: yes
+  register: indexer_wait
+  ignore_errors: yes
+
+- name: "Debug - Kiểm tra Indexer status nếu timeout"
+  ansible.builtin.shell: |
+    systemctl status wazuh-indexer --no-pager
+    echo "---"
+    journalctl -xeu wazuh-indexer.service -n 50 --no-pager
+  register: indexer_debug
+  become: yes
+  when: indexer_wait is failed
+
+- name: "Hiển thị debug info nếu Indexer failed"
+  ansible.builtin.debug:
+    var: indexer_debug.stdout_lines
+  when: indexer_wait is failed
+
+- name: "Fail nếu Indexer không start được"
+  ansible.builtin.fail:
+    msg: |
+      ❌ Wazuh Indexer không thể khởi động sau 10 phút.
+      Vui lòng kiểm tra logs ở trên.
+      
+      Common issues:
+      1. Không đủ RAM (cần ít nhất 2GB)
+      2. Port 9200 đã được sử dụng
+      3. Lỗi cấu hình SSL certificates
+      
+      Debug commands:
+      sudo systemctl status wazuh-indexer
+      sudo journalctl -xeu wazuh-indexer.service
+      sudo tail -100 /var/log/wazuh-indexer/wazuh-cluster.log
+  when: indexer_wait is failed
+
+- name: "Test Indexer health"
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ wazuh_indexer_http_port }}"
+    method: GET
+    user: admin
+    password: "{{ wazuh_indexer_admin_password }}"
+    validate_certs: no
+    status_code: [200, 401]
+  register: indexer_health
+  until: indexer_health.status in [200, 401]
+  retries: 10
+  delay: 10
+  become: yes
+  ignore_errors: yes
+
+- name: "Initialize Wazuh Indexer security"
+  ansible.builtin.shell: |
+    export JAVA_HOME=/usr/share/wazuh-indexer/jdk
+    /usr/share/wazuh-indexer/bin/indexer-security-init.sh
+  become: yes
+  register: security_init
+  failed_when: false
+  changed_when: security_init.rc == 0
+
+# ==================== INSTALL WAZUH MANAGER ====================
+- name: "Cài đặt Wazuh Manager"
+  ansible.builtin.package:
+    name: wazuh-manager
+    state: present
+  become: yes
+
+- name: "Tạo thư mục certificates cho Manager"
+  ansible.builtin.file:
+    path: /var/ossec/etc/certs
+    state: directory
+    owner: root
+    group: wazuh
+    mode: '0750'
+  become: yes
+
+- name: "Copy Manager certificates"
+  ansible.builtin.copy:
+    src: "/etc/wazuh-certificates/wazuh-certificates/{{ item.src }}"
+    dest: "/var/ossec/etc/certs/{{ item.dest }}"
+    remote_src: yes
+    owner: root
+    group: wazuh
+    mode: '0640'
+  loop:
+    - { src: 'wazuh-1.pem', dest: 'manager.pem' }
+    - { src: 'wazuh-1-key.pem', dest: 'manager-key.pem' }
+    - { src: 'root-ca.pem', dest: 'root-ca.pem' }
+  become: yes
+
+- name: "Deploy Wazuh Manager configuration"
+  ansible.builtin.template:
+    src: wazuh_manager_ossec.conf.j2
+    dest: "{{ wazuh_manager_config_path }}"
+    owner: root
+    group: wazuh
+    mode: '0640'
+  become: yes
+
+- name: "Enable Wazuh Manager"
+  ansible.builtin.systemd:
+    name: wazuh-manager
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+
+- name: "Start Wazuh Manager"
+  ansible.builtin.systemd:
+    name: wazuh-manager
+    state: started
+  become: yes
+  register: manager_start
+  until: manager_start is succeeded
+  retries: 3
+  delay: 10
+
+# ==================== INSTALL FILEBEAT ====================
+- name: "Cài đặt Filebeat"
+  ansible.builtin.package:
+    name: filebeat
+    state: present
+  become: yes
+
+- name: "Download Filebeat Wazuh module"
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/4.x/filebeat/wazuh-filebeat-0.4.tar.gz
+    dest: /tmp/wazuh-filebeat-0.4.tar.gz
+  become: yes
+
+- name: "Extract Filebeat module"
+  ansible.builtin.unarchive:
+    src: /tmp/wazuh-filebeat-0.4.tar.gz
+    dest: /usr/share/filebeat/module/
+    remote_src: yes
+  become: yes
+
+- name: "Tạo thư mục certificates cho Filebeat"
+  ansible.builtin.file:
+    path: /etc/filebeat/certs
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+  become: yes
+
+- name: "Copy Filebeat certificates"
+  ansible.builtin.copy:
+    src: "/etc/wazuh-certificates/wazuh-certificates/{{ item.src }}"
+    dest: "/etc/filebeat/certs/{{ item.dest }}"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0640'
+  loop:
+    - { src: 'wazuh-1.pem', dest: 'filebeat.pem' }
+    - { src: 'wazuh-1-key.pem', dest: 'filebeat-key.pem' }
+    - { src: 'root-ca.pem', dest: 'root-ca.pem' }
+  become: yes
+
+- name: "Download Filebeat template"
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/wazuh/wazuh/v4.7.0/extensions/elasticsearch/7.x/wazuh-template.json
+    dest: /etc/filebeat/wazuh-template.json
+    mode: '0644'
+  become: yes
+
+- name: "Configure Filebeat"
+  ansible.builtin.copy:
+    content: |
+      output.elasticsearch:
+        hosts: ["https://{{ ansible_default_ipv4.address }}:{{ wazuh_indexer_http_port }}"]
+        protocol: https
+        username: admin
+        password: "{{ wazuh_indexer_admin_password }}"
+        ssl.certificate: "/etc/filebeat/certs/filebeat.pem"
+        ssl.key: "/etc/filebeat/certs/filebeat-key.pem"
+        ssl.certificate_authorities: ["/etc/filebeat/certs/root-ca.pem"]
+      
+      setup.template.json.enabled: true
+      setup.template.json.path: '/etc/filebeat/wazuh-template.json'
+      setup.template.json.name: 'wazuh'
+      setup.ilm.overwrite: true
+      setup.ilm.enabled: false
+      
+      filebeat.modules:
+        - module: wazuh
+          alerts:
+            enabled: true
+          archives:
+            enabled: false
+      
+      logging.level: info
+      logging.to_files: true
+      logging.files:
+        path: /var/log/filebeat
+        name: filebeat
+        keepfiles: 7
+        permissions: 0644
+    dest: /etc/filebeat/filebeat.yml
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+
+- name: "Enable và start Filebeat"
+  ansible.builtin.systemd:
+    name: filebeat
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+# ==================== INSTALL WAZUH DASHBOARD ====================
+- name: "Cài đặt Wazuh Dashboard"
+  ansible.builtin.package:
+    name: wazuh-dashboard
+    state: present
+  become: yes
+
+- name: "Tạo thư mục certificates cho Dashboard"
+  ansible.builtin.file:
+    path: /etc/wazuh-dashboard/certs
+    state: directory
+    owner: wazuh-dashboard
+    group: wazuh-dashboard
+    mode: '0750'
+  become: yes
+
+- name: "Copy Dashboard certificates"
+  ansible.builtin.copy:
+    src: "/etc/wazuh-certificates/wazuh-certificates/{{ item.src }}"
+    dest: "/etc/wazuh-dashboard/certs/{{ item.dest }}"
+    remote_src: yes
+    owner: wazuh-dashboard
+    group: wazuh-dashboard
+    mode: '0640'
+  loop:
+    - { src: 'dashboard.pem', dest: 'dashboard.pem' }
+    - { src: 'dashboard-key.pem', dest: 'dashboard-key.pem' }
+    - { src: 'root-ca.pem', dest: 'root-ca.pem' }
+  become: yes
+
+- name: "Deploy Wazuh Dashboard configuration"
+  ansible.builtin.copy:
+    content: |
+      server.host: {{ wazuh_dashboard_server_host }}
+      server.port: {{ wazuh_dashboard_port }}
+      opensearch.hosts: https://{{ ansible_default_ipv4.address }}:{{ wazuh_indexer_http_port }}
+      opensearch.ssl.verificationMode: certificate
+      opensearch.username: admin
+      opensearch.password: "{{ wazuh_indexer_admin_password }}"
+      opensearch.requestHeadersWhitelist: ["securitytenant","Authorization"]
+      opensearch_security.multitenancy.enabled: false
+      opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+      server.ssl.enabled: true
+      server.ssl.key: "/etc/wazuh-dashboard/certs/dashboard-key.pem"
+      server.ssl.certificate: "/etc/wazuh-dashboard/certs/dashboard.pem"
+      opensearch.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/certs/root-ca.pem"]
+      uiSettings.overrides.defaultRoute: /app/wazuh
+    dest: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    owner: wazuh-dashboard
+    group: wazuh-dashboard
+    mode: '0640'
+  become: yes
+
+- name: "Enable và start Wazuh Dashboard"
+  ansible.builtin.systemd:
+    name: wazuh-dashboard
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+- name: "Chờ Wazuh Dashboard khởi động hoàn tất"
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ wazuh_dashboard_port }}"
+    delay: 20
+    timeout: 300
+  become: yes
+
+# ==================== CONFIGURE FIREWALL ====================
+- name: "Mở firewall ports cho Wazuh Manager (firewalld)"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ wazuh_firewall_ports }}"
+  become: yes
+  when:
+    - wazuh_firewall_enabled
+    - ansible_os_family == "RedHat"
+
+- name: "Mở firewall ports cho Wazuh Indexer (firewalld)"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ wazuh_indexer_firewall_ports }}"
+  become: yes
+  when:
+    - wazuh_firewall_enabled
+    - ansible_os_family == "RedHat"
+
+- name: "Mở firewall ports cho Wazuh Dashboard (firewalld)"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ wazuh_dashboard_firewall_ports }}"
+  become: yes
+  when:
+    - wazuh_firewall_enabled
+    - ansible_os_family == "RedHat"
+
+# ==================== VERIFY INSTALLATION ====================
+- name: "Chờ tất cả services ổn định"
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: "Kiểm tra trạng thái Wazuh Manager"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_manager_service }}"
+  register: wazuh_manager_status
+  become: yes
+
+- name: "Kiểm tra trạng thái Wazuh Indexer"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_indexer_service }}"
+  register: wazuh_indexer_status
+  become: yes
+
+- name: "Kiểm tra trạng thái Wazuh Dashboard"
+  ansible.builtin.systemd:
+    name: "{{ wazuh_dashboard_service }}"
+  register: wazuh_dashboard_status
+  become: yes
+
+- name: "Kiểm tra trạng thái Filebeat"
+  ansible.builtin.systemd:
+    name: filebeat
+  register: filebeat_status
+  become: yes
+
+- name: "Test Wazuh API"
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:55000"
+    method: GET
+    validate_certs: no
+    status_code: [200, 401]
+  register: api_test
+  failed_when: false
+
+- name: "Hiển thị trạng thái các services"
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║           📊 WAZUH SERVER STATUS                               ║
+      ╚════════════════════════════════════════════════════════════════╝
+      
+      ✅ Wazuh Manager:   {{ 'Running' if wazuh_manager_status.status.ActiveState == 'active' else 'Stopped' }}
+      ✅ Wazuh Indexer:   {{ 'Running' if wazuh_indexer_status.status.ActiveState == 'active' else 'Stopped' }}
+      ✅ Wazuh Dashboard: {{ 'Running' if wazuh_dashboard_status.status.ActiveState == 'active' else 'Stopped' }}
+      ✅ Filebeat:        {{ 'Running' if filebeat_status.status.ActiveState == 'active' else 'Stopped' }}
+      
+      🌐 Access Information:
+      ├─ Dashboard:  https://{{ ansible_default_ipv4.address }}:{{ wazuh_dashboard_port }}
+      ├─ API:        https://{{ ansible_default_ipv4.address }}:55000 (Status: {{ api_test.status | default('N/A') }})
+      └─ Indexer:    https://{{ ansible_default_ipv4.address }}:{{ wazuh_indexer_http_port }}
+      
+      🔐 Default Credentials:
+      ├─ Username:   admin
+      └─ Password:   {{ wazuh_indexer_admin_password }}
+      
+      📜 Certificates: /etc/wazuh-certificates/wazuh-certificates/
+      📊 JVM Heap:     {{ [half_ram.stdout | int, 4096] | min }}MB
+      
+      ⚠️  IMPORTANT:
+      1. Change default password immediately
+      2. Access dashboard: https://{{ ansible_default_ipv4.address }}
+      3. Review firewall rules
+      
+      📋 Verify Commands:
+      sudo systemctl status wazuh-manager wazuh-indexer wazuh-dashboard
+      sudo /var/ossec/bin/agent_control -l
+      curl -k -u admin:SecretPassword https://localhost:9200
+      
+      ═══════════════════════════════════════════════════════════════════

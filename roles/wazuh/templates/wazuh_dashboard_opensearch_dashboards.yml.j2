@@ -1,0 +1,81 @@
+# File: roles/wazuh/templates/wazuh_dashboard_opensearch_dashboards.yml.j2
+# Wazuh Dashboard (OpenSearch Dashboards) Configuration
+
+server.host: {{ wazuh_dashboard_server_host }}
+server.port: {{ wazuh_dashboard_port }}
+opensearch.hosts: https://{{ ansible_default_ipv4.address | default('localhost') }}:{{ wazuh_indexer_http_port }}
+opensearch.ssl.verificationMode: certificate
+
+# Dashboard branding
+opensearch_dashboards.branding:
+  logo:
+    defaultUrl: ""
+  mark:
+    defaultUrl: ""
+  loadingLogo:
+    defaultUrl: ""
+  faviconUrl: ""
+  applicationTitle: "Wazuh Dashboard"
+
+# Security configuration
+opensearch.username: kibanaserver
+opensearch.password: kibanaserver
+opensearch.requestHeadersWhitelist: ["securitytenant","Authorization"]
+
+opensearch_security.multitenancy.enabled: true
+opensearch_security.multitenancy.tenants.preferred: ["Private", "Global"]
+opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+
+# Use this setting if you are running kibana without https
+opensearch_security.cookie.secure: false
+
+# Disable the Wazuh updates
+wazuh.updates.disabled: true
+
+# Custom branding
+wazuh.customization.enabled: true
+wazuh.customization.logo.app: ""
+wazuh.customization.logo.sidebar: ""
+wazuh.customization.logo.healthcheck: ""
+wazuh.customization.logo.reports: ""
+
+# Server configuration
+server.defaultRoute: /app/wazuh
+
+# Logging
+logging.dest: /var/log/wazuh-dashboard/wazuh-dashboard.log
+logging.verbose: false
+
+# Monitoring
+monitoring.enabled: true
+monitoring.kibana.collection.enabled: false
+
+# Telemetry
+telemetry.enabled: false
+telemetry.optIn: false
+
+# Custom headers
+server.customResponseHeaders: 
+  "X-Frame-Options": "SAMEORIGIN"
+  "X-Content-Type-Options": "nosniff"
+  "X-XSS-Protection": "1; mode=block"
+
+# Session timeout (in milliseconds) - 8 hours
+opensearch_security.session.ttl: 28800000
+opensearch_security.session.keepalive: true
+
+# API timeout
+wazuh.timeout: 20000
+
+# Wazuh API configuration
+# You can add API entries manually by editing this file
+# The structure should be like this:
+# hosts:
+#   - <id>:
+#       url: https://<WAZUH_MANAGER_IP>
+#       port: <WAZUH_API_PORT>
+#       username: <WAZUH_API_USER>
+#       password: <WAZUH_API_PASSWORD>
+
+uiSettings.overrides:
+  "theme:darkMode": false
