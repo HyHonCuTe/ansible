@@ -8,7 +8,7 @@
 
   vars:
     wazuh_mode: "agent"
-    wazuh_manager_ip: "192.168.1.10"  # Thay đổi thành IP của Wazuh Manager
+    wazuh_manager_ip: "192.168.1.125"  # IP của Wazuh Manager
     wazuh_agent_group: "default"
     wazuh_version: "4.7"
 

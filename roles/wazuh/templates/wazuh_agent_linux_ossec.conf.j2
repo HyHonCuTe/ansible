@@ -13,6 +13,14 @@
     <time-reconnect>60</time-reconnect>
     <auto_restart>yes</auto_restart>
     <crypto_method>aes</crypto_method>
+    <!-- Agent enrollment -->
+    <enrollment>
+      <enabled>yes</enabled>
+      <manager_address>{{ wazuh_manager_ip }}</manager_address>
+      <port>1515</port>
+      <agent_name>{{ inventory_hostname }}</agent_name>
+      <groups>{{ wazuh_agent_group }}</groups>
+    </enrollment>
   </client>
 
   <client_buffer>

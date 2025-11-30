@@ -25,46 +25,12 @@
   become: yes
   when: ansible_os_family == "RedHat"
 
-# ==================== ADD WAZUH REPOSITORY ====================
-- name: "Thêm Wazuh GPG key (Debian/Ubuntu)"
-  ansible.builtin.apt_key:
-    url: "{{ wazuh_repo_gpg_key }}"
-    state: present
-  become: yes
-  when: ansible_os_family == "Debian"
-
-- name: "Thêm Wazuh repository (Debian/Ubuntu)"
-  ansible.builtin.apt_repository:
-    repo: "{{ wazuh_repo_apt }}"
-    state: present
-    filename: wazuh
-  become: yes
-  when: ansible_os_family == "Debian"
-
-- name: "Thêm Wazuh GPG key (RedHat/CentOS)"
-  ansible.builtin.rpm_key:
-    key: "{{ wazuh_repo_gpg_key }}"
-    state: present
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: "Thêm Wazuh repository (RedHat/CentOS)"
-  ansible.builtin.yum_repository:
-    name: wazuh
-    description: Wazuh repository
-    baseurl: "{{ wazuh_repo_yum }}"
-    gpgcheck: yes
-    gpgkey: "{{ wazuh_repo_gpg_key }}"
-    enabled: yes
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-# ==================== INSTALL WAZUH AGENT ====================
-- name: "Cài đặt Wazuh Agent (Debian/Ubuntu)"
+# ==================== INSTALL WAZUH AGENT (Direct from URL) ====================
+# Note: Installing specific version 4.7.5 to match manager version
+- name: "Install Wazuh Agent from URL (Debian/Ubuntu)"
   ansible.builtin.apt:
-    name: wazuh-agent
+    deb: "https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.7.5-1_amd64.deb"
     state: present
-    update_cache: yes
   become: yes
   when: ansible_os_family == "Debian"
   environment:
@@ -72,10 +38,11 @@
     WAZUH_AGENT_GROUP: "{{ wazuh_agent_group }}"
     WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
 
-- name: "Cài đặt Wazuh Agent (RedHat/CentOS)"
+- name: "Install Wazuh Agent from URL (RedHat/CentOS)"
   ansible.builtin.yum:
-    name: wazuh-agent
+    name: "https://packages.wazuh.com/4.x/yum/wazuh-agent-4.7.5-1.x86_64.rpm"
     state: present
+    disable_gpg_check: yes
   become: yes
   when: ansible_os_family == "RedHat"
   environment:
@@ -116,6 +83,20 @@
     - selinux_status.stdout == "Enforcing"
   failed_when: false
 
+# ==================== REGISTER AGENT WITH MANAGER ====================
+- name: "Register agent using agent-auth"
+  ansible.builtin.shell: |
+    /var/ossec/bin/agent-auth -m {{ wazuh_manager_ip }} -A {{ inventory_hostname }} -G {{ wazuh_agent_group }}
+  become: yes
+  register: agent_auth_result
+  failed_when: false
+  changed_when: "'Valid key received' in agent_auth_result.stdout or 'Valid key created' in agent_auth_result.stdout"
+
+- name: "Debug agent-auth output"
+  ansible.builtin.debug:
+    var: agent_auth_result
+  when: agent_auth_result.rc != 0
+
 # ==================== START WAZUH AGENT ====================
 - name: "Enable và start Wazuh Agent"
   ansible.builtin.systemd:
@@ -130,6 +111,7 @@
   ansible.builtin.wait_for:
     timeout: 30
   delegate_to: localhost
+  connection: local
   become: false
 
 - name: "Kiểm tra trạng thái Wazuh Agent"

@@ -13,7 +13,7 @@ wazuh_major_version: "4.x"
 # ==================== WAZUH SERVER CONFIGURATION ====================
 wazuh_manager_ip: "127.0.0.1"
 wazuh_manager_port: 1514
-wazuh_manager_protocol: "udp"
+wazuh_manager_protocol: "tcp"
 
 # ==================== WAZUH AGENT CONFIGURATION ====================
 wazuh_agent_name: "{{ ansible_hostname }}"
@@ -21,8 +21,8 @@ wazuh_agent_group: "default"
 
 # ==================== REPOSITORY CONFIGURATION ====================
 wazuh_repo_gpg_key: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
-wazuh_repo_apt: "deb https://packages.wazuh.com/4.x/apt/ stable main"
-wazuh_repo_yum: "https://packages.wazuh.com/4.x/yum/"
+wazuh_repo_apt: "deb https://packages.wazuh.com/4.7/apt/ stable main"
+wazuh_repo_yum: "https://packages.wazuh.com/4.7/yum/"
 
 # ==================== INDEXER CONFIGURATION ====================
 wazuh_indexer_http_port: 9200
