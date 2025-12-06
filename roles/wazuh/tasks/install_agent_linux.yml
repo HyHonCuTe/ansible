@@ -37,6 +37,10 @@
     WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
     WAZUH_AGENT_GROUP: "{{ wazuh_agent_group }}"
     WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
+  register: apt_install_result
+  until: apt_install_result is succeeded
+  retries: 3
+  delay: 10
 
 - name: "Install Wazuh Agent from URL (RedHat/CentOS)"
   ansible.builtin.yum:
@@ -49,6 +53,10 @@
     WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
     WAZUH_AGENT_GROUP: "{{ wazuh_agent_group }}"
     WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
+  register: yum_install_result
+  until: yum_install_result is succeeded
+  retries: 3
+  delay: 10
 
 # ==================== CONFIGURE WAZUH AGENT ====================
 - name: "Deploy Wazuh Agent configuration"
@@ -87,7 +95,8 @@
 - name: "Kiểm tra agent đã tồn tại trên Manager"
   ansible.builtin.shell: |
     /var/ossec/bin/agent_control -l 2>/dev/null | grep -i "{{ inventory_hostname }}" | awk -F',' '{print $1}' | awk '{print $2}' | head -1
-  delegate_to: "{{ wazuh_manager_ip }}"
+  delegate_to: "{{ groups['wazuh_server'][0] }}"
+  connection: local
   register: existing_agent_id
   become: yes
   failed_when: false
@@ -98,7 +107,8 @@
 - name: "Xóa agent duplicate trên Manager (nếu tồn tại)"
   ansible.builtin.shell: |
     echo "y" | /var/ossec/bin/manage_agents -r {{ existing_agent_id.stdout }}
-  delegate_to: "{{ wazuh_manager_ip }}"
+  delegate_to: "{{ groups['wazuh_server'][0] }}"
+  connection: local
   become: yes
   when:
     - wazuh_remove_duplicate_agent | default(true)
