@@ -1,0 +1,29 @@
+---
+# Zabbix Deployment Playbook
+# Author: HyHonCuTe
+# Updated: 2025-10-19 13:09:41 UTC
+
+- name: "Deploy Zabbix Infrastructure"
+  hosts: zabbix_server
+  connection: local
+  become: yes
+  tags:
+    - zabbix_server
+    - always
+  
+  pre_tasks:
+    - name: "Display deployment start"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════╗
+          ║   🚀 Zabbix Deployment Starting               ║
+          ║   Server: {{ inventory_hostname }}             ║
+          ║   Time: {{ ansible_date_time.iso8601 }}        ║
+          ║   User: HyHonCuTe                              ║
+          ╚════════════════════════════════════════════════╝
+  
+  roles:
+    - role: zabbix
+      tags:
+        - zabbix_server
+

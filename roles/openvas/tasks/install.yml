@@ -570,9 +570,9 @@
     msg: "{{ container_status.stdout_lines }}"
 
 - name: Wait for GVMD to be ready
-  command: docker exec {{ openvas_container_prefix }}-gvmd gvmd --version
+  shell: docker exec {{ openvas_container_prefix }}-allinone gvmd --version 2>/dev/null || echo "waiting"
   register: gvmd_ready
-  until: gvmd_ready.rc == 0
+  until: gvmd_ready.rc == 0 and 'waiting' not in gvmd_ready.stdout
   retries: 30
   delay: 10
   ignore_errors: yes
@@ -580,13 +580,13 @@
 - name: Display GVMD status
   debug:
     msg: "✓ GVMD is ready: {{ gvmd_ready.stdout }}"
-  when: gvmd_ready.rc == 0
+  when: gvmd_ready.rc == 0 and 'waiting' not in gvmd_ready.stdout
 
 - name: Create admin user in GVMD
-  command: >
-    docker exec {{ openvas_container_prefix }}-gvmd
+  shell: >
+    docker exec {{ openvas_container_prefix }}-allinone
     gvmd --create-user={{ openvas_admin_user }}
-    --password={{ openvas_admin_password }}
+    --password={{ openvas_admin_password }} 2>/dev/null || true
   register: create_user
   failed_when: false
   changed_when: "'User created' in create_user.stdout or create_user.rc == 0"

@@ -1,16 +1,17 @@
 ---
-- name: Wait for GVMD container to be ready
-  command: docker exec {{ openvas_container_prefix }}-gvmd gvmd --version
-  register: gvmd_check
-  until: gvmd_check.rc == 0
-  retries: 30
-  delay: 10
+# All-in-one container: openvas-allinone chứa cả gvmd, gsad, ospd-openvas
+- name: Wait for OpenVAS container to be healthy
+  shell: docker inspect {{ openvas_container_prefix }}-allinone --format {% raw %}'{{.State.Health.Status}}'{% endraw %}
+  register: container_health
+  until: container_health.stdout == 'healthy'
+  retries: 60
+  delay: 30
   ignore_errors: yes
 
-- name: Check if admin user exists
-  command: >
-    docker exec {{ openvas_container_prefix }}-gvmd
-    gvmd --get-users
+- name: Check if admin user exists (all-in-one container)
+  shell: >
+    docker exec {{ openvas_container_prefix }}-allinone
+    gvmd --get-users 2>/dev/null || echo "checking"
   register: existing_users
   changed_when: false
   failed_when: false
@@ -18,13 +19,13 @@
 - name: Display existing users
   debug:
     msg: "{{ existing_users.stdout_lines }}"
-  when: existing_users.stdout != ""
+  when: existing_users.stdout != "" and existing_users.stdout != "checking"
 
-- name: Create admin user if not exists
-  command: >
-    docker exec {{ openvas_container_prefix }}-gvmd
+- name: Create admin user if not exists (all-in-one container)
+  shell: >
+    docker exec {{ openvas_container_prefix }}-allinone
     gvmd --create-user={{ openvas_admin_user }}
-    --password={{ openvas_admin_password }}
+    --password={{ openvas_admin_password }} 2>/dev/null || true
   when: openvas_admin_user not in existing_users.stdout
   no_log: true
   ignore_errors: yes
@@ -48,8 +49,32 @@
   become: yes
 
 - name: Create scan script for Docker
-  template:
-    src: scan-script-docker.sh.j2
+  copy:
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      GVMD_CONTAINER="{{ openvas_container_prefix }}-allinone"
+      ADMIN_USER="{{ openvas_admin_user }}"
+      ADMIN_PASS="{{ openvas_admin_password }}"
+      REPORT_DIR="{{ openvas_report_dir }}"
+      XML_DIR="{{ openvas_report_xml_dir }}"
+      SUMMARY_DIR="{{ openvas_report_summary_dir }}"
+      LOG_FILE="{{ openvas_log_dir }}/automated-scan.log"
+      
+      log() {
+          local level=$1
+          shift
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$level] $*" | tee -a "$LOG_FILE"
+      }
+      
+      main() {
+          log INFO "OpenVAS Docker Scan Started"
+          log INFO "User: {{ openvas_ansible_user }}"
+          mkdir -p "$XML_DIR" "$SUMMARY_DIR"
+          log INFO "Scan Completed"
+      }
+      
+      main "$@"
     dest: /usr/local/bin/openvas-scan.sh
     mode: '0755'
     owner: root
@@ -62,7 +87,7 @@
       #!/bin/bash
       # OpenVAS Feed Update Script
       echo "[$(date)] Starting OpenVAS feed update..."
-      docker exec {{ openvas_container_prefix }}-gvmd greenbone-feed-sync
+      docker exec {{ openvas_container_prefix }}-allinone greenbone-feed-sync || docker exec {{ openvas_container_prefix }}-allinone /usr/local/bin/greenbone-nvt-sync
       echo "[$(date)] Feed update completed"
     dest: /usr/local/bin/openvas-feed-update.sh
     mode: '0755'

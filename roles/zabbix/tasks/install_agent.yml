@@ -379,6 +379,7 @@
   wait_for:
     timeout: 5
   delegate_to: localhost
+  connection: local
 
 - name: "Check Zabbix Agent final status"
   systemd:

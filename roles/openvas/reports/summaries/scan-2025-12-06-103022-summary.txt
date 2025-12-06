@@ -2,21 +2,21 @@
 ║        OpenVAS Scan Report Summary             ║
 ╚════════════════════════════════════════════════╝
 
-Scan Date: 2025-10-19T09:52:20Z
+Scan Date: 2025-12-06T03:30:22Z
 User: HyHonCuTe
 
-Target ID: 6f66d5e1-8df5-4d5c-affa-fbb0a94c45bb
-Task ID: 3d43e2eb-335b-4afa-8a92-1e82f8a050be
-Report ID: 2c502d96-13f6-4a08-b9fb-8fc7e5bb9b6d
+Target ID: 51b619d7-d753-4b88-8048-26eb2ff4ff3a
+Task ID: 74aeb070-c85c-4457-9f1c-7ef0303e1998
+Report ID: 69efd002-fd34-41ed-963a-fe959f793d36
 
 Scanned Hosts:
-- 192.168.1.69
+- 192.168.1.137
 
 Report Location:
-/home/server_ansible/Desktop/ansible/roles/openvas/reports/xml/scan-2025-10-19-165220.xml
+/home/ansible/ansible/roles/openvas/reports/xml/scan-2025-12-06-103022.xml
 
 Parsed Summary:
-/home/server_ansible/Desktop/ansible/roles/openvas/reports/summaries/scan-2025-10-19-165220-parsed.txt
+/home/ansible/ansible/roles/openvas/reports/summaries/scan-2025-12-06-103022-parsed.txt
 
 View in Web UI:
 http://localhost:9392

@@ -1,0 +1,36 @@
+═══════════════════════════════════════════════════════════════
+              SCAP COMPLIANCE SUMMARY REPORT
+═══════════════════════════════════════════════════════════════
+
+Host Information:
+─────────────────────────────────────────────────────────────
+Hostname:          openscap-AlmaLinux
+IP Address:        192.168.1.137
+Operating System:  AlmaLinux 9.5
+Scan Date:         2025-12-05 17:08:45
+Profile:           xccdf_org.ssgproject.content_profile_cis_server_l1
+
+Scan Results BEFORE Remediation:
+─────────────────────────────────────────────────────────────
+✅ PASSED:         146
+❌ FAILED:         120
+📈 TOTAL CHECKS:   266
+
+Scan Results AFTER Remediation:
+─────────────────────────────────────────────────────────────
+✅ PASSED:         146
+❌ FAILED:         5
+📈 TOTAL CHECKS:   151
+
+Remediation Summary:
+─────────────────────────────────────────────────────────────
+Errors Fixed:      115 out of 120
+Success Rate:      95.8%
+Status:            ✅ EXCELLENT
+Files Generated:
+─────────────────────────────────────────────────────────────
+Before Report:     openscap-AlmaLinux_192.168.1.137_BEFORE_*.html
+After Report:      openscap-AlmaLinux_192.168.1.137_AFTER_*.html
+Backup File:       openscap-AlmaLinux_192.168.1.137_backup_*.tar.gz
+
+═══════════════════════════════════════════════════════════════

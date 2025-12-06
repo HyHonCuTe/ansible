@@ -139,6 +139,7 @@
 # ==================== TẠO THỦ MỤC TRÊN CONTROLLER ====================
 - name: "Tạo thư mục results trên Ansible Controller"
   delegate_to: localhost
+  connection: local
   become: false
   run_once: false
   ansible.builtin.file:
@@ -148,6 +149,7 @@
 
 - name: "Tạo thư mục backup trên Ansible Controller"
   delegate_to: localhost
+  connection: local
   become: false
   run_once: false
   ansible.builtin.file:
@@ -353,6 +355,7 @@
 # ==================== TẠO FILE SUMMARY ====================
 - name: "Tạo file summary report"
   delegate_to: localhost
+  connection: local
   become: false
   ansible.builtin.copy:
     content: |

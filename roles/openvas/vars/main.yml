@@ -2,7 +2,7 @@
 # OpenVAS Configuration
 openvas_version: "22.4"
 openvas_admin_user: "admin"
-openvas_admin_password: "YourSecurePassword123!"
+openvas_admin_password: "Ansible123!"
 
 # Scan Configuration
 openvas_scan_config: "Full and fast"

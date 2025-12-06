@@ -1,5 +1,5 @@
 - name: "Kiểm tra bảo mật hệ thống với OpenSCAP"
-  hosts: all
+  hosts: openscap_servers
   become: true
 
   roles:

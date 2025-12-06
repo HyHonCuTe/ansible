@@ -84,7 +84,7 @@
       {% if grafana_api_check.status == 200 %}
       ✅ Grafana authentication successful
       Username: {{ grafana_admin_user }}
-      {% elsif password_change_result.status == 200 %}
+      {% elif password_change_result.status == 200 %}
       ✅ Password changed successfully
       Username: {{ grafana_admin_user }}
       {% else %}

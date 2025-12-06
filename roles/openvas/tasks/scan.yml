@@ -90,8 +90,8 @@
       from gvm.transforms import EtreeTransform
       from lxml import etree
       
-      # Use TLS connection to GMP on port 9390
-      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      # Connect to gvmd on localhost:9390 inside container
+      connection = TLSConnection(hostname='127.0.0.1', port=9390, certfile=None, cafile=None, keyfile=None)
       transform = EtreeTransform()
       
       try:
@@ -183,8 +183,8 @@
       
       target_id = sys.argv[1]
       
-      # Use TLS connection to GMP on port 9390
-      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      # Connect to gvmd on localhost:9390 inside container
+      connection = TLSConnection(hostname='127.0.0.1', port=9390, certfile=None, cafile=None, keyfile=None)
       transform = EtreeTransform()
       
       try:
@@ -275,8 +275,8 @@
       
       task_id = sys.argv[1]
       
-      # Use TLS connection to GMP on port 9390
-      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      # Connect to gvmd on localhost:9390 inside container
+      connection = TLSConnection(hostname='127.0.0.1', port=9390, certfile=None, cafile=None, keyfile=None)
       transform = EtreeTransform()
       
       try:
@@ -313,8 +313,8 @@
       
       task_id = sys.argv[1]
       
-      # Use TLS connection to GMP on port 9390
-      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      # Connect to gvmd on localhost:9390 inside container
+      connection = TLSConnection(hostname='127.0.0.1', port=9390, certfile=None, cafile=None, keyfile=None)
       transform = EtreeTransform()
       
       try:
@@ -357,8 +357,8 @@
       
       report_id = sys.argv[1]
       
-      # Use TLS connection to GMP on port 9390
-      connection = TLSConnection(hostname='127.0.0.1', port=9390)
+      # Connect to gvmd on localhost:9390 inside container
+      connection = TLSConnection(hostname='127.0.0.1', port=9390, certfile=None, cafile=None, keyfile=None)
       transform = EtreeTransform()
       
       try:

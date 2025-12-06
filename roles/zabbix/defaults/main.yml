@@ -26,10 +26,6 @@ zabbix_web_password: zabbix
 # Zabbix Agent settings
 zabbix_agent_hostname: "{{ ansible_hostname }}"
 zabbix_agent_listen_port: 10050
-zabbix_agent_server: "{{ hostvars['zabbix-server']['ansible_default_ipv4']['address'] | default('127.0.0.1') }}"
-zabbix_agent_server_active: "{{ hostvars['zabbix-server']['ansible_default_ipv4']['address'] | default('127.0.0.1') }}"
-
-
 zabbix_agent_server: "{{ groups['zabbix_server'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | first | default('192.168.1.125') }}"
 zabbix_agent_server_active: "{{ groups['zabbix_server'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | first | default('192.168.1.125') }}"
 

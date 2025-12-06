@@ -98,11 +98,13 @@
     mode: '0755'
     owner: "server_ansible"
   delegate_to: localhost
+  connection: local
 
 - name: Kiểm tra dung lượng đĩa nơi lưu backup
   command: df -h "{{ backup_folder }}/"
   register: disk_space
   delegate_to: localhost
+  connection: local
 
 - name: Hiển thị thông tin dung lượng đĩa
   debug:

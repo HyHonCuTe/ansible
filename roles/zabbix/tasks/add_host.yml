@@ -22,6 +22,7 @@
       - requests
     state: present
   delegate_to: localhost
+  connection: local
   run_once: true
   become: no
 
@@ -43,6 +44,7 @@
     return_content: yes
   register: zabbix_auth
   delegate_to: localhost
+  connection: local
   run_once: true
   failed_when: zabbix_auth.json.error is defined
 
@@ -78,6 +80,7 @@
     return_content: yes
   register: existing_host
   delegate_to: localhost
+  connection: local
   failed_when: existing_host.json.error is defined
 
 - name: "Display host check result"
@@ -104,6 +107,7 @@
     return_content: yes
   register: hostgroup
   delegate_to: localhost
+  connection: local
   run_once: true
   failed_when: hostgroup.json.error is defined or hostgroup.json.result | length == 0
 
@@ -132,6 +136,7 @@
     return_content: yes
   register: template_check
   delegate_to: localhost
+  connection: local
   run_once: true
   loop:
     - "Linux by Zabbix agent"
@@ -194,6 +199,7 @@
     return_content: yes
   register: create_host
   delegate_to: localhost
+  connection: local
   when: existing_host.json.result | length == 0
   failed_when: create_host.json.error is defined
 
@@ -216,6 +222,7 @@
   wait_for:
     timeout: 10
   delegate_to: localhost
+  connection: local
 
 - name: "Verify host status in Zabbix"
   uri:
@@ -245,6 +252,7 @@
     return_content: yes
   register: host_status
   delegate_to: localhost
+  connection: local
   failed_when: host_status.json.result | length == 0
 
 - name: "Display host status"

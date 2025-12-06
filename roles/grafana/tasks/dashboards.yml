@@ -13,15 +13,16 @@
 
 - name: "Check if dashboard files exist"
   stat:
-    path: "{{ role_path }}/files/dashboards"
+    path: "{{ role_path }}/dashboards"
   register: dashboards_dir_check
   delegate_to: localhost
+  connection: local
 
 - name: "Copy dashboard files (if available)"
   block:
     - name: "Copy Prometheus Node Exporter dashboard"
       copy:
-        src: "dashboards/node-exporter-full.json"
+        src: "{{ role_path }}/dashboards/node-exporter-full.json"
         dest: "{{ grafana_dashboards_dir }}/node-exporter-full.json"
         owner: grafana
         group: grafana
@@ -30,7 +31,7 @@
 
     - name: "Copy Prometheus Overview dashboard"
       copy:
-        src: "dashboards/prometheus-overview.json"
+        src: "{{ role_path }}/dashboards/prometheus-overview.json"
         dest: "{{ grafana_dashboards_dir }}/prometheus-overview.json"
         owner: grafana
         group: grafana
@@ -39,7 +40,7 @@
 
     - name: "Copy Zabbix Server dashboard"
       copy:
-        src: "dashboards/zabbix-server.json"
+        src: "{{ role_path }}/dashboards/zabbix-server.json"
         dest: "{{ grafana_dashboards_dir }}/zabbix-server.json"
         owner: grafana
         group: grafana
@@ -48,7 +49,7 @@
 
     - name: "Copy System Monitoring dashboard"
       copy:
-        src: "dashboards/system-monitoring.json"
+        src: "{{ role_path }}/dashboards/system-monitoring.json"
         dest: "{{ grafana_dashboards_dir }}/system-monitoring.json"
         owner: grafana
         group: grafana
@@ -57,7 +58,7 @@
 
     - name: "Copy Security Monitoring dashboard"
       copy:
-        src: "dashboards/security-monitoring.json"
+        src: "{{ role_path }}/dashboards/security-monitoring.json"
         dest: "{{ grafana_dashboards_dir }}/security-monitoring.json"
         owner: grafana
         group: grafana

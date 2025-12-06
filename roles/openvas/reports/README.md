@@ -2,7 +2,7 @@
 
 Created: 2025-10-18 16:55:42 UTC
 User: root
-Location: /home/server_ansible/Desktop/ansible/roles/openvas/reports
+Location: /home/ansible/ansible/roles/openvas/reports
 
 ## Directory Structure
 
