@@ -1,0 +1,190 @@
+---
+# ADDS Validation Tasks
+# Verify Active Directory installation and health
+
+- name: "Wait for Active Directory Web Services"
+  win_service:
+    name: ADWS
+    state: started
+  register: adws_service
+  retries: 30
+  delay: 10
+  until: adws_service.state == "running"
+  when: adds_wait_for_adws | bool
+
+- name: "Verify AD DS installation"
+  win_shell: |
+    try {
+      Import-Module ActiveDirectory -ErrorAction Stop
+      $domain = Get-ADDomain -ErrorAction Stop
+      Write-Output "Domain Name: $($domain.DNSRoot)"
+      Write-Output "NetBIOS Name: $($domain.NetBIOSName)"
+      Write-Output "Domain Mode: $($domain.DomainMode)"
+      Write-Output "Forest Mode: $((Get-ADForest).ForestMode)"
+      Write-Output "Domain Controllers: $((Get-ADDomainController -Filter *).Count)"
+      Write-Output "VALIDATION: SUCCESS"
+    } catch {
+      Write-Output "VALIDATION: FAILED - $($_.Exception.Message)"
+      exit 1
+    }
+  register: adds_validation
+  changed_when: false
+  retries: 10
+  delay: 30
+  until: "'SUCCESS' in adds_validation.stdout"
+
+- name: "Display domain information"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║         Active Directory Domain Information           ║
+      ╠════════════════════════════════════════════════════════╣
+      {{ adds_validation.stdout_lines | map('regex_replace', '^', '║  ') | join('\n') }}
+      ╚════════════════════════════════════════════════════════╝
+
+- name: "Check DNS service status"
+  win_service:
+    name: DNS
+  register: dns_service_status
+  when: adds_install_dns | bool
+
+- name: "Validate DNS service is running"
+  assert:
+    that:
+      - dns_service_status.state == "running"
+    fail_msg: "DNS service is not running!"
+    success_msg: "✅ DNS service is running"
+  when: adds_install_dns | bool
+
+- name: "Check critical AD DS services"
+  win_shell: |
+    $services = @('ADWS', 'DNS', 'Netlogon', 'NTDS', 'kdc', 'W32Time')
+    $results = @()
+    
+    foreach ($svc in $services) {
+      try {
+        $service = Get-Service -Name $svc -ErrorAction SilentlyContinue
+        if ($service) {
+          $status = if ($service.Status -eq 'Running') { '✅' } else { '❌' }
+          $results += "$status $svc`: $($service.Status)"
+        }
+      } catch {
+        $results += "⚠️  $svc`: Not found"
+      }
+    }
+    
+    $results -join "`n"
+  register: service_check
+  changed_when: false
+
+- name: "Display AD DS services status"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║         Active Directory Services Status              ║
+      ╠════════════════════════════════════════════════════════╣
+      {{ service_check.stdout_lines | map('regex_replace', '^', '║  ') | join('\n') }}
+      ╚════════════════════════════════════════════════════════╝
+
+- name: "Verify domain controller functionality"
+  win_shell: |
+    $tests = @()
+    
+    # Test 1: DCDiag basic connectivity
+    $tests += "DCDiag Connectivity Test..."
+    try {
+      $dcdiag = dcdiag /test:connectivity 2>&1
+      if ($LASTEXITCODE -eq 0) {
+        $tests += "  ✅ Connectivity: PASSED"
+      } else {
+        $tests += "  ⚠️  Connectivity: FAILED"
+      }
+    } catch {
+      $tests += "  ❌ Connectivity: ERROR"
+    }
+    
+    # Test 2: DNS registration
+    $tests += "DNS Registration Test..."
+    try {
+      $hostname = $env:COMPUTERNAME
+      $domain = (Get-ADDomain).DNSRoot
+      $fqdn = "$hostname.$domain"
+      $resolved = Resolve-DnsName -Name $fqdn -ErrorAction SilentlyContinue
+      if ($resolved) {
+        $tests += "  ✅ DNS Registration: PASSED"
+      } else {
+        $tests += "  ⚠️  DNS Registration: FAILED"
+      }
+    } catch {
+      $tests += "  ❌ DNS Registration: ERROR"
+    }
+    
+    # Test 3: Sysvol share
+    $tests += "SYSVOL Share Test..."
+    if (Test-Path "{{ adds_sysvol_path }}") {
+      $tests += "  ✅ SYSVOL Path: EXISTS"
+    } else {
+      $tests += "  ❌ SYSVOL Path: NOT FOUND"
+    }
+    
+    # Test 4: NTDS Database
+    $tests += "NTDS Database Test..."
+    if (Test-Path "{{ adds_database_path }}\ntds.dit") {
+      $tests += "  ✅ NTDS Database: EXISTS"
+    } else {
+      $tests += "  ❌ NTDS Database: NOT FOUND"
+    }
+    
+    $tests -join "`n"
+  register: dc_functionality
+  changed_when: false
+
+- name: "Display domain controller functionality tests"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║      Domain Controller Functionality Tests            ║
+      ╠════════════════════════════════════════════════════════╣
+      {{ dc_functionality.stdout_lines | map('regex_replace', '^', '║  ') | join('\n') }}
+      ╚════════════════════════════════════════════════════════╝
+
+- name: "Get domain user count"
+  win_shell: |
+    (Get-ADUser -Filter *).Count
+  register: user_count
+  changed_when: false
+
+- name: "Get domain computer count"
+  win_shell: |
+    (Get-ADComputer -Filter *).Count
+  register: computer_count
+  changed_when: false
+
+- name: "Display domain statistics"
+  debug:
+    msg: |
+      📊 Domain Statistics:
+         Users: {{ user_count.stdout.strip() }}
+         Computers: {{ computer_count.stdout.strip() }}
+
+- name: "Create validation report"
+  win_shell: |
+    $report = @"
+    ╔════════════════════════════════════════════════════════╗
+    ║    Active Directory Validation Report                 ║
+    ║    Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm')  ║
+    ╠════════════════════════════════════════════════════════╣
+    ║  Domain: {{ adds_domain_name }}
+    ║  NetBIOS: {{ adds_domain_netbios_name }}
+    ║  Status: VALIDATED ✅
+    ╚════════════════════════════════════════════════════════╝
+    "@
+    
+    $report | Out-File -FilePath "C:\AD_Validation_Report.txt" -Encoding UTF8
+    Write-Output "Report saved to: C:\AD_Validation_Report.txt"
+  register: validation_report
+  changed_when: false
+
+- name: "Display validation report location"
+  debug:
+    msg: "{{ validation_report.stdout }}"

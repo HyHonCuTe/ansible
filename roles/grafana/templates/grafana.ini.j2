@@ -36,9 +36,18 @@ enabled = false
 [smtp]
 enabled = {{ grafana_smtp_enabled | lower }}
 host = {{ grafana_smtp_host }}
+{% if grafana_smtp_user is defined and grafana_smtp_user %}
+user = {{ grafana_smtp_user }}
+{% endif %}
+{% if grafana_smtp_password is defined and grafana_smtp_password %}
+password = {{ grafana_smtp_password }}
+{% endif %}
 from_address = {{ grafana_smtp_from_address }}
 {% if grafana_smtp_from_name is defined %}
 from_name = {{ grafana_smtp_from_name }}
+{% endif %}
+{% if grafana_smtp_skip_verify is defined %}
+skip_verify = {{ grafana_smtp_skip_verify | lower }}
 {% endif %}
 
 # ✅ FIX: Sử dụng Unified Alerting thay vì Legacy Alerting

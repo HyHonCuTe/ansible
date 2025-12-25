@@ -42,6 +42,13 @@
     - dashboards
     - grafana_dashboards
 
+- name: "Include alerting configuration"
+  include_tasks: alerting.yml
+  tags:
+    - alerting
+    - grafana_alerting
+  when: grafana_smtp_enabled | bool
+
 - name: "Display completion message"
   debug:
     msg: |

@@ -1,0 +1,87 @@
+---
+# Keepalived Installation and Configuration Tasks
+
+- name: "Install Keepalived"
+  ansible.builtin.package:
+    name: keepalived
+    state: present
+
+- name: "Create health check script"
+  ansible.builtin.template:
+    src: check_haproxy.sh.j2
+    dest: "{{ keepalived_check_script }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "Deploy Keepalived configuration"
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart keepalived
+
+- name: "Configure firewall for VRRP"
+  ansible.posix.firewalld:
+    rich_rule: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ keepalived_firewall_rich_rules }}"
+  when: firewall_enabled | bool
+
+- name: "Enable kernel IP forwarding"
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: "Enable IP nonlocal bind"
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: "Enable and start Keepalived service"
+  ansible.builtin.systemd:
+    name: keepalived
+    state: started
+    enabled: yes
+
+- name: "Wait for Keepalived to initialize"
+  ansible.builtin.pause:
+    seconds: 3
+
+- name: "Verify Keepalived is running"
+  ansible.builtin.systemd:
+    name: keepalived
+    state: started
+  register: keepalived_status
+  failed_when: keepalived_status.status.ActiveState != "active"
+
+- name: "Check VRRP state"
+  ansible.builtin.shell: |
+    ip addr show {{ keepalived_interface }} | grep {{ keepalived_virtual_ip }} || echo "VIP not on this node"
+  register: vrrp_check
+  changed_when: false
+
+- name: "Display Keepalived configuration"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Keepalived configured successfully
+      🔧 State: {{ keepalived_state }}
+      🎯 Priority: {{ keepalived_priority }}
+      🌐 Virtual IP: {{ keepalived_virtual_ip }}
+      🔌 Interface: {{ keepalived_interface }}
+      📡 Router ID: {{ keepalived_virtual_router_id }}
+      {% if keepalived_virtual_ip in vrrp_check.stdout %}
+      👑 This node is MASTER (holding VIP)
+      {% else %}
+      🛡️  This node is BACKUP
+      {% endif %}

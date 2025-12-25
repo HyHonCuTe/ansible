@@ -1,0 +1,120 @@
+---
+# ADDS Domain Configuration Tasks
+# Promote server to Domain Controller
+
+- name: "Check if server is already a Domain Controller"
+  win_shell: |
+    try {
+      $domain = Get-ADDomain -ErrorAction Stop
+      Write-Output "True"
+    } catch {
+      Write-Output "False"
+    }
+  register: is_domain_controller
+  changed_when: false
+  failed_when: false
+
+- name: "Display current domain controller status"
+  debug:
+    msg: |
+      {% if is_domain_controller.stdout.strip() == "True" %}
+      ℹ️  Server is already a Domain Controller
+      {% else %}
+      📝 Server will be promoted to Domain Controller
+      {% endif %}
+
+- name: "Promote server to Domain Controller (create new forest)"
+  win_shell: |
+    $SecurePassword = ConvertTo-SecureString "{{ adds_safe_mode_password }}" -AsPlainText -Force
+    
+    $params = @{
+      DomainName = "{{ adds_domain_name }}"
+      DomainNetbiosName = "{{ adds_domain_netbios_name }}"
+      DomainMode = "{{ adds_domain_mode }}"
+      ForestMode = "{{ adds_forest_mode }}"
+      SafeModeAdministratorPassword = $SecurePassword
+      DatabasePath = "{{ adds_database_path }}"
+      LogPath = "{{ adds_log_path }}"
+      SysvolPath = "{{ adds_sysvol_path }}"
+      InstallDns = ${{ adds_install_dns | string | lower }}
+      Force = $true
+      NoRebootOnCompletion = $false
+    }
+    
+    try {
+      Install-ADDSForest @params
+      Write-Output "SUCCESS"
+    } catch {
+      Write-Output "ERROR: $($_.Exception.Message)"
+      exit 1
+    }
+  register: adds_promotion
+  when: is_domain_controller.stdout.strip() == "False"
+  async: 1200
+  poll: 30
+  no_log: true
+  ignore_errors: yes
+
+- name: "Display domain promotion status"
+  debug:
+    msg: |
+      {% if adds_promotion.changed %}
+      ✅ Domain Controller promotion initiated
+      Domain: {{ adds_domain_name }}
+      Server will reboot automatically...
+      {% elif is_domain_controller.stdout.strip() == "True" %}
+      ℹ️  Server is already a Domain Controller - skipping promotion
+      {% endif %}
+
+- name: "Wait for server reboot after DC promotion"
+  wait_for_connection:
+    timeout: 900
+    delay: 120
+  when: 
+    - adds_promotion.changed | default(false)
+    - adds_auto_reboot | bool
+
+- name: "Wait additional time for AD services to fully start"
+  pause:
+    seconds: 60
+  when: adds_promotion.changed | default(false)
+
+- name: "Configure DNS forwarders"
+  win_shell: |
+    {% for forwarder in adds_dns_forwarders %}
+    Add-DnsServerForwarder -IPAddress "{{ forwarder }}" -ErrorAction SilentlyContinue
+    {% endfor %}
+    Get-DnsServerForwarder | Select-Object -ExpandProperty IPAddress
+  register: dns_forwarders_config
+  when: 
+    - adds_install_dns | bool
+    - adds_dns_forwarders is defined
+    - adds_dns_forwarders | length > 0
+  changed_when: false
+
+- name: "Display DNS forwarders configuration"
+  debug:
+    msg: |
+      ✅ DNS forwarders configured:
+      {{ dns_forwarders_config.stdout_lines | default(['None']) | join('\n      ') }}
+  when: dns_forwarders_config is defined
+
+- name: "Configure Windows Firewall rules for AD DS"
+  win_firewall_rule:
+    name: "{{ item.name }}"
+    localport: "{{ item.port }}"
+    protocol: "{{ item.protocol }}"
+    action: allow
+    direction: in
+    enabled: yes
+    state: present
+  loop: "{{ adds_firewall_rules }}"
+  when: adds_configure_firewall | bool
+  register: firewall_config
+
+- name: "Display firewall configuration status"
+  debug:
+    msg: "✅ Windows Firewall rules configured for AD DS"
+  when: 
+    - firewall_config is defined
+    - firewall_config.changed

@@ -1,0 +1,12 @@
+---
+# handlers for mariadb_replication
+
+- name: restart mariadb
+  ansible.builtin.systemd:
+    name: mariadb
+    state: restarted
+
+- name: reload mariadb
+  ansible.builtin.systemd:
+    name: mariadb
+    state: reloaded

@@ -1,0 +1,18 @@
+---
+# ADDS Handlers
+# Restart services when needed
+
+- name: restart adws
+  win_service:
+    name: ADWS
+    state: restarted
+
+- name: restart dns
+  win_service:
+    name: DNS
+    state: restarted
+
+- name: restart netlogon
+  win_service:
+    name: Netlogon
+    state: restarted

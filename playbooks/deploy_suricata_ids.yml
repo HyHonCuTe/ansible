@@ -1,0 +1,90 @@
+---
+- name: "Deploy Suricata IDS on Security Server"
+  hosts: security_servers
+  become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: "Display deployment information"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║          Suricata IDS Deployment Starting                    ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║  Target: {{ ansible_hostname }}                              
+          ║  IP: {{ ansible_host }}                                      
+          ║  Interface: {{ suricata_interface }}                         
+          ║  Network: {{ suricata_home_net }}                            
+          ╚═══════════════════════════════════════════════════════════════╝
+
+  roles:
+    - role: suricata
+      tags:
+        - suricata
+        - ids
+
+  post_tasks:
+    - name: "Wait for Suricata to fully start"
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: "Verify Suricata is running"
+      ansible.builtin.systemd:
+        name: suricata
+      register: suricata_service
+
+    - name: "Check if rules are loaded"
+      ansible.builtin.shell: "grep 'rule reload complete' {{ suricata_log_dir }}/suricata.log | tail -1"
+      register: rules_loaded
+      changed_when: false
+      failed_when: false
+
+    - name: "Check interface is in promiscuous mode"
+      ansible.builtin.shell: "ip link show {{ suricata_interface }} | grep PROMISC"
+      register: promisc_mode
+      changed_when: false
+      failed_when: false
+
+    - name: "Get Suricata stats"
+      ansible.builtin.shell: "suricatasc -c 'dump-counters' | head -20"
+      register: suricata_stats
+      changed_when: false
+      failed_when: false
+
+    - name: "Display deployment summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║        Suricata IDS Deployment Complete!                     ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  ✅ Service Status: {{ suricata_service.status.ActiveState }}
+          ║  ✅ Interface: {{ suricata_interface }}                      
+          ║  ✅ Promiscuous Mode: {{ 'ENABLED ✓' if promisc_mode.rc == 0 else 'DISABLED ✗' }}
+          ║  ✅ Rules Loaded: {{ 'YES ✓' if rules_loaded.rc == 0 else 'CHECKING...' }}
+          ║                                                               ║
+          ║  🌐 Web Dashboard:                                            ║
+          ║     http://{{ ansible_host }}:{{ suricata_web_ui_port }}/
+          ║                                                               ║
+          ║  📊 Monitoring:                                               ║
+          ║     - HAProxy: 192.168.1.8, 192.168.1.25                     ║
+          ║     - Web Servers: 192.168.1.27, 192.168.1.30                ║
+          ║     - VIP: 192.168.1.100                                     ║
+          ║                                                               ║
+          ║  📝 Log Files:                                                ║
+          ║     - EVE JSON: {{ suricata_log_dir }}/eve.json              
+          ║     - Fast Log: {{ suricata_log_dir }}/fast.log              
+          ║     - Main Log: {{ suricata_log_dir }}/suricata.log          
+          ║                                                               ║
+          ║  🎯 Demo Tests Available:                                     ║
+          ║     1. Port Scan Detection                                   ║
+          ║     2. SQL Injection Detection                               ║
+          ║     3. Suspicious User-Agent Detection                       ║
+          ║     4. Directory Traversal Detection                         ║
+          ║                                                               ║
+          ║  📈 Next Steps:                                               ║
+          ║     - Access web dashboard to view alerts                    ║
+          ║     - Run test scenarios                                     ║
+          ║     - Monitor HA infrastructure traffic                      ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝

@@ -1,0 +1,158 @@
+---
+# ADDS (Active Directory Domain Services) Default Variables
+# For Windows Server 2016/2019/2022
+# Author: HyHonCuTe
+# Date: 2025-12-25
+
+# ==================== DOMAIN CONFIGURATION ====================
+# Domain name (FQDN)
+adds_domain_name: "corp.hyhon.io.vn"
+
+# NetBIOS name (short name, max 15 characters)
+adds_domain_netbios_name: "CORP"
+
+# Domain mode (Win2012R2, Win2016, WinThreshold - Windows Server 2016)
+adds_domain_mode: "WinThreshold"
+
+# Forest mode (Win2012R2, Win2016, WinThreshold)
+adds_forest_mode: "WinThreshold"
+
+# ==================== DOMAIN CONTROLLER CONFIGURATION ====================
+# SafeMode Administrator Password (DSRM password)
+adds_safe_mode_password: "Admin123"
+
+# Database path
+adds_database_path: "C:\\Windows\\NTDS"
+
+# Log files path
+adds_log_path: "C:\\Windows\\NTDS"
+
+# SYSVOL path
+adds_sysvol_path: "C:\\Windows\\SYSVOL"
+
+# ==================== DNS CONFIGURATION ====================
+# Install DNS server with AD DS
+adds_install_dns: true
+
+# DNS forwarders (optional - for external DNS resolution)
+adds_dns_forwarders:
+  - "8.8.8.8"
+  - "8.8.4.4"
+
+# ==================== FEATURES TO INSTALL ====================
+# Features required for ADDS
+adds_required_features:
+  - AD-Domain-Services
+  - RSAT-ADDS
+  - RSAT-AD-PowerShell
+  - RSAT-AD-AdminCenter
+  - RSAT-ADDS-Tools
+  - DNS
+  - RSAT-DNS-Server
+
+# ==================== VALIDATION & HEALTH CHECK ====================
+# Enable post-installation validation
+adds_validate_installation: true
+
+# Validation timeout (seconds)
+adds_validation_timeout: 300
+
+# Reboot after installation
+adds_auto_reboot: true
+
+# Wait for AD Web Services after reboot
+adds_wait_for_adws: true
+adds_adws_timeout: 600
+
+# ==================== ORGANIZATIONAL UNITS (OU) ====================
+# Create default OUs after installation
+adds_create_default_ous: true
+
+adds_organizational_units:
+  - name: "Departments"
+    path: ""
+    description: "Root organizational unit for departments"
+  - name: "IT"
+    path: "OU=Departments"
+    description: "IT Department"
+  - name: "HR"
+    path: "OU=Departments"
+    description: "Human Resources"
+  - name: "Sales"
+    path: "OU=Departments"
+    description: "Sales Department"
+  - name: "Servers"
+    path: ""
+    description: "Server computers"
+  - name: "Workstations"
+    path: ""
+    description: "Client workstations"
+
+# ==================== DEFAULT USERS ====================
+# Create default admin users
+adds_create_default_users: false
+
+adds_default_users:
+  - username: "admin.it"
+    password: "Admin123"
+    firstname: "IT"
+    lastname: "Administrator"
+    ou: "OU=IT,OU=Departments"
+    description: "IT Department Administrator"
+    groups:
+      - "Domain Admins"
+
+# ==================== DEFAULT GROUPS ====================
+# Create default security groups
+adds_create_default_groups: false
+
+adds_default_groups:
+  - name: "IT-Admins"
+    scope: "Global"
+    category: "Security"
+    ou: "OU=IT,OU=Departments"
+    description: "IT Administrators Group"
+
+# ==================== BACKUP CONFIGURATION ====================
+# Backup AD configuration
+adds_backup_enabled: false
+adds_backup_path: "C:\\AD_Backup"
+
+# ==================== MONITORING & LOGGING ====================
+# Enable detailed logging
+adds_enable_logging: true
+adds_log_file: "C:\\AD_Installation.log"
+
+# ==================== FIREWALL CONFIGURATION ====================
+# Configure Windows Firewall for AD DS
+adds_configure_firewall: true
+
+# Required firewall rules for AD DS
+adds_firewall_rules:
+  - name: "Active Directory Domain Controller - LDAP (TCP-In)"
+    port: 389
+    protocol: "TCP"
+  - name: "Active Directory Domain Controller - LDAP (UDP-In)"
+    port: 389
+    protocol: "UDP"
+  - name: "Active Directory Domain Controller - LDAPS (TCP-In)"
+    port: 636
+    protocol: "TCP"
+  - name: "Active Directory Domain Controller - Kerberos (TCP-In)"
+    port: 88
+    protocol: "TCP"
+  - name: "Active Directory Domain Controller - Kerberos (UDP-In)"
+    port: 88
+    protocol: "UDP"
+  - name: "Active Directory Domain Controller - DNS (TCP-In)"
+    port: 53
+    protocol: "TCP"
+  - name: "Active Directory Domain Controller - DNS (UDP-In)"
+    port: 53
+    protocol: "UDP"
+  - name: "Active Directory Domain Controller - SMB (TCP-In)"
+    port: 445
+    protocol: "TCP"
+  - name: "Active Directory Domain Controller - RPC (TCP-In)"
+    port: 135
+    protocol: "TCP"

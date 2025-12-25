@@ -1,0 +1,137 @@
+---
+# High Availability Load Balancer Deployment Playbook
+# Deploy HAProxy + Keepalived + Web Servers
+# Author: Ansible Automation
+# Date: 2025-12-25
+
+- name: "Deploy Backend Web Servers"
+  hosts: web_servers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: "Display deployment banner"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      Deploying Backend Web Server                     ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Host: {{ ansible_hostname }}
+          ║  IP: {{ ansible_host }}
+          ║  Server Name: {{ server_name }}
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Include webserver_ha role"
+      ansible.builtin.include_role:
+        name: webserver_ha
+
+- name: "Deploy HAProxy Load Balancers"
+  hosts: ha_servers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Populate backend servers from inventory
+    haproxy_backend_servers: "{{ groups['web_servers'] | map('extract', hostvars) | map(attribute='ansible_host') | zip(groups['web_servers']) | map('list') | map('reverse') | list | map('community.general.dict', ['name', 'ip']) | map('combine', {'port': 80}) | list }}"
+  
+  tasks:
+    - name: "Display deployment banner"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      Deploying HAProxy Load Balancer                  ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Host: {{ ansible_hostname }}
+          ║  IP: {{ ansible_host }}
+          ║  State: {{ keepalived_state }}
+          ║  Priority: {{ keepalived_priority }}
+          ║  Virtual IP: {{ virtual_ip }}
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Build backend servers list"
+      ansible.builtin.set_fact:
+        haproxy_backend_servers:
+          - name: "{{ groups['web_servers'][0] }}"
+            ip: "{{ hostvars[groups['web_servers'][0]]['ansible_host'] }}"
+            port: 80
+          - name: "{{ groups['web_servers'][1] }}"
+            ip: "{{ hostvars[groups['web_servers'][1]]['ansible_host'] }}"
+            port: 80
+    
+    - name: "Include haproxy_lb role"
+      ansible.builtin.include_role:
+        name: haproxy_lb
+
+- name: "Deploy Keepalived High Availability"
+  hosts: ha_servers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    keepalived_virtual_ip: "{{ virtual_ip }}"
+    keepalived_virtual_router_id: "{{ virtual_router_id }}"
+  
+  tasks:
+    - name: "Display deployment banner"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      Deploying Keepalived HA                          ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Host: {{ ansible_hostname }}
+          ║  IP: {{ ansible_host }}
+          ║  State: {{ keepalived_state }}
+          ║  Priority: {{ keepalived_priority }}
+          ║  VIP: {{ keepalived_virtual_ip }}
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Include keepalived_ha role"
+      ansible.builtin.include_role:
+        name: keepalived_ha
+
+- name: "Final Summary"
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    vip: "{{ hostvars[groups['ha_servers'][0]]['virtual_ip'] }}"
+    ha1_host: "{{ hostvars[groups['ha_servers'][0]]['ansible_host'] }}"
+    ha1_hostname: "{{ hostvars[groups['ha_servers'][0]]['ansible_hostname'] }}"
+    ha1_state: "{{ hostvars[groups['ha_servers'][0]]['keepalived_state'] }}"
+    ha2_host: "{{ hostvars[groups['ha_servers'][1]]['ansible_host'] }}"
+    ha2_hostname: "{{ hostvars[groups['ha_servers'][1]]['ansible_hostname'] }}"
+    ha2_state: "{{ hostvars[groups['ha_servers'][1]]['keepalived_state'] }}"
+    web1_name: "{{ hostvars[groups['web_servers'][0]]['server_name'] }}"
+    web1_host: "{{ hostvars[groups['web_servers'][0]]['ansible_host'] }}"
+    web2_name: "{{ hostvars[groups['web_servers'][1]]['server_name'] }}"
+    web2_host: "{{ hostvars[groups['web_servers'][1]]['ansible_host'] }}"
+  
+  tasks:
+    - name: "Display deployment summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║      HA Load Balancer Deployment Complete!                   ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  🌐 Virtual IP (VIP): http://{{ vip }}
+          ║                                                               ║
+          ║  🔧 HA Load Balancers:                                        ║
+          ║    - {{ ha1_hostname }}: {{ ha1_host }} ({{ ha1_state }})
+          ║    - {{ ha2_hostname }}: {{ ha2_host }} ({{ ha2_state }})
+          ║                                                               ║
+          ║  🖥️  Backend Web Servers:                                     ║
+          ║    - {{ web1_name }}: {{ web1_host }}
+          ║    - {{ web2_name }}: {{ web2_host }}
+          ║                                                               ║
+          ║  📊 HAProxy Stats:                                            ║
+          ║    - http://{{ ha1_host }}:8080/stats
+          ║    - http://{{ ha2_host }}:8080/stats
+          ║    - User: admin / Pass: admin123                            ║
+          ║                                                               ║
+          ║  ✅ Testing Instructions:                                     ║
+          ║    1. Access: http://{{ vip }}
+          ║    2. Refresh multiple times to see load balancing           ║
+          ║    3. Stop HAProxy/Keepalived on MASTER to test failover     ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝

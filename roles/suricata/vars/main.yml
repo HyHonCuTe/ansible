@@ -1,0 +1,4 @@
+---
+# Suricata role variables (override defaults if needed)
+
+# These can be overridden in inventory or playbook

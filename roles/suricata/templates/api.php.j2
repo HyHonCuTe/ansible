@@ -1,0 +1,117 @@
+<?php
+header('Content-Type: application/json');
+
+$eve_log_file = '{{ suricata_log_dir }}/eve.json';
+$action = $_GET['action'] ?? 'get_alerts';
+$limit = (int)($_GET['limit'] ?? 50);
+
+function parseEveLog($file, $limit = 50) {
+    if (!file_exists($file)) {
+        return [
+            'success' => false,
+            'error' => 'Log file not found',
+            'alerts' => [],
+            'stats' => ['total' => 0, 'high' => 0, 'medium' => 0, 'low' => 0]
+        ];
+    }
+
+    // Check if file is readable
+    if (!is_readable($file)) {
+        return [
+            'success' => false,
+            'error' => 'Log file not readable. Check permissions.',
+            'alerts' => [],
+            'stats' => ['total' => 0, 'high' => 0, 'medium' => 0, 'low' => 0]
+        ];
+    }
+
+    $alerts = [];
+    $stats = ['total' => 0, 'high' => 0, 'medium' => 0, 'low' => 0];
+    
+    // Read file from end (most recent entries)
+    $lines = [];
+    $handle = fopen($file, 'r');
+    
+    if ($handle) {
+        // Read last N lines efficiently
+        fseek($handle, -1, SEEK_END);
+        $lines_read = 0;
+        $buffer = '';
+        
+        while ($lines_read < $limit * 10 && ftell($handle) > 0) {
+            $char = fgetc($handle);
+            if ($char === "\n" && !empty($buffer)) {
+                array_unshift($lines, $buffer);
+                $buffer = '';
+                $lines_read++;
+            } else {
+                $buffer = $char . $buffer;
+            }
+            fseek($handle, -2, SEEK_CUR);
+        }
+        
+        if (!empty($buffer)) {
+            array_unshift($lines, $buffer);
+        }
+        
+        fclose($handle);
+    }
+
+    // Parse JSON lines
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if (empty($line)) continue;
+        
+        $event = json_decode($line, true);
+        if (!$event || !isset($event['event_type'])) continue;
+        
+        // Only process alert events
+        if ($event['event_type'] === 'alert') {
+            $severity = $event['alert']['severity'] ?? 3;
+            
+            $alert = [
+                'timestamp' => $event['timestamp'] ?? date('c'),
+                'src_ip' => $event['src_ip'] ?? 'N/A',
+                'src_port' => $event['src_port'] ?? 0,
+                'dest_ip' => $event['dest_ip'] ?? 'N/A',
+                'dest_port' => $event['dest_port'] ?? 0,
+                'proto' => strtoupper($event['proto'] ?? 'N/A'),
+                'signature' => $event['alert']['signature'] ?? 'Unknown',
+                'category' => $event['alert']['category'] ?? 'Unknown',
+                'severity' => $severity,
+                'signature_id' => $event['alert']['signature_id'] ?? 0
+            ];
+            
+            $alerts[] = $alert;
+            $stats['total']++;
+            
+            if ($severity == 1) $stats['high']++;
+            elseif ($severity == 2) $stats['medium']++;
+            else $stats['low']++;
+            
+            if (count($alerts) >= $limit) break;
+        }
+    }
+    
+    return [
+        'success' => true,
+        'alerts' => $alerts,
+        'stats' => $stats
+    ];
+}
+
+switch ($action) {
+    case 'get_alerts':
+        $result = parseEveLog($eve_log_file, $limit);
+        echo json_encode($result);
+        break;
+        
+    case 'get_stats':
+        $result = parseEveLog($eve_log_file, 1000);
+        echo json_encode(['stats' => $result['stats']]);
+        break;
+        
+    default:
+        echo json_encode(['error' => 'Invalid action']);
+}
+?>

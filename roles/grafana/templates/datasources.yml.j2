@@ -10,6 +10,9 @@ datasources:
     type: {{ datasource.type }}
     access: {{ datasource.access }}
     url: {{ datasource.url }}
+{% if datasource.uid is defined %}
+    uid: {{ datasource.uid }}
+{% endif %}
     isDefault: {{ datasource.is_default | lower }}
     editable: {{ datasource.editable | lower }}
 {% if datasource.json_data is defined %}

@@ -1,0 +1,76 @@
+---
+# Deploy MariaDB Web Demo Application
+# This playbook deploys a PHP web interface to test database replication
+# Author: Ansible Automation
+# Date: 2025-12-25
+
+- name: "Deploy Web Demo on Primary Server"
+  hosts: web_servers[0]
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    db_role: "primary"
+  
+  tasks:
+    - name: "Include web demo deployment tasks"
+      ansible.builtin.include_role:
+        name: mariadb_replication
+        tasks_from: deploy_web_demo
+
+- name: "Deploy Web Demo on Replica Server"
+  hosts: web_servers[1]
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    db_role: "replica"
+  
+  tasks:
+    - name: "Include web demo deployment tasks"
+      ansible.builtin.include_role:
+        name: mariadb_replication
+        tasks_from: deploy_web_demo
+
+- name: "Demo Instructions"
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: "Display demo instructions"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║      MariaDB Replication Web Demo Deployed!                  ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  🌐 Access the demo application:                              ║
+          ║    http://192.168.1.100/db-demo/                              ║
+          ║                                                               ║
+          ║  🔄 How to test replication:                                  ║
+          ║                                                               ║
+          ║  Step 1: Open VIP in browser                                 ║
+          ║    - Refresh until you see WEB-1 (PRIMARY)                    ║
+          ║    - Note the URL or open in one tab                          ║
+          ║                                                               ║
+          ║  Step 2: Open VIP in another tab                             ║
+          ║    - Refresh until you see WEB-2 (REPLICA)                    ║
+          ║                                                               ║
+          ║  Step 3: Add a user on PRIMARY                                ║
+          ║    - Fill in username and email                               ║
+          ║    - Click "Add User"                                         ║
+          ║                                                               ║
+          ║  Step 4: Refresh REPLICA page                                 ║
+          ║    - The new user should appear!                              ║
+          ║    - Check the "Created On Server" column                     ║
+          ║                                                               ║
+          ║  ✅ Expected Result:                                          ║
+          ║    - Data added on PRIMARY appears on REPLICA                 ║
+          ║    - Sync time: < 1 second                                    ║
+          ║    - Both servers show the same data                          ║
+          ║                                                               ║
+          ║  📊 Direct access (for testing):                              ║
+          ║    - PRIMARY: http://192.168.1.27/db-demo/                    ║
+          ║    - REPLICA: http://192.168.1.30/db-demo/                    ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝

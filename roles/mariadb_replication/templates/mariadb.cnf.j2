@@ -1,0 +1,68 @@
+#
+# MariaDB Server Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Generated: {{ ansible_date_time.iso8601 }}
+# Server Role: {{ mariadb_replication_role | upper }}
+#
+
+[mysqld]
+# Basic Settings
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+symbolic-links=0
+
+# Network Configuration
+bind-address={{ mariadb_bind_address }}
+port={{ mariadb_port }}
+max_connections={{ mariadb_max_connections }}
+
+# Server ID (must be unique)
+server-id={{ mariadb_server_id }}
+
+# Binary Logging (required for replication)
+log-bin=mysql-bin
+binlog_format={{ mariadb_binlog_format }}
+expire_logs_days={{ mariadb_expire_logs_days }}
+max_binlog_size={{ mariadb_max_binlog_size }}
+
+# Relay Log (for replica)
+{% if mariadb_replication_role == "replica" %}
+relay-log=mysql-relay-bin
+relay-log-index=mysql-relay-bin.index
+{% endif %}
+
+# Character Set
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+
+# InnoDB Settings
+innodb_buffer_pool_size={{ mariadb_innodb_buffer_pool_size }}
+innodb_log_file_size={{ mariadb_innodb_log_file_size }}
+innodb_flush_log_at_trx_commit=1
+innodb_flush_method=O_DIRECT
+
+# Logging
+log-error=/var/log/mariadb/mariadb.log
+slow_query_log=1
+slow_query_log_file=/var/log/mariadb/mariadb-slow.log
+long_query_time=2
+
+# Replication Settings
+{% if mariadb_replication_role == "primary" %}
+# Primary specific settings
+log-slave-updates=1
+sync_binlog=1
+{% endif %}
+
+{% if mariadb_replication_role == "replica" %}
+# Replica specific settings
+read_only=0
+relay_log_recovery=1
+slave_skip_errors=1062,1053
+{% endif %}
+
+[mysql]
+default-character-set=utf8mb4
+
+[client]
+default-character-set=utf8mb4

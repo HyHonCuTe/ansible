@@ -17,53 +17,64 @@
   register: dashboards_dir_check
   delegate_to: localhost
   connection: local
+  become: no
 
 - name: "Copy dashboard files (if available)"
   block:
-    - name: "Copy Prometheus Node Exporter dashboard"
+    - name: "Copy Prometheus System Monitoring dashboard (Main)"
       copy:
-        src: "{{ role_path }}/dashboards/node-exporter-full.json"
-        dest: "{{ grafana_dashboards_dir }}/node-exporter-full.json"
+        src: "{{ role_path }}/dashboards/prometheus-system-monitoring.json"
+        dest: "{{ grafana_dashboards_dir }}/prometheus-system-monitoring.json"
         owner: grafana
         group: grafana
         mode: '0644'
       when: dashboards_dir_check.stat.exists
 
-    - name: "Copy Prometheus Overview dashboard"
-      copy:
-        src: "{{ role_path }}/dashboards/prometheus-overview.json"
-        dest: "{{ grafana_dashboards_dir }}/prometheus-overview.json"
-        owner: grafana
-        group: grafana
-        mode: '0644'
-      when: dashboards_dir_check.stat.exists
+    # Hidden/Backup dashboards - uncomment if needed
+    # - name: "Copy Prometheus Node Exporter dashboard"
+    #   copy:
+    #     src: "{{ role_path }}/dashboards/node-exporter-full.json"
+    #     dest: "{{ grafana_dashboards_dir }}/node-exporter-full.json"
+    #     owner: grafana
+    #     group: grafana
+    #     mode: '0644'
+    #   when: dashboards_dir_check.stat.exists
 
-    - name: "Copy Zabbix Server dashboard"
-      copy:
-        src: "{{ role_path }}/dashboards/zabbix-server.json"
-        dest: "{{ grafana_dashboards_dir }}/zabbix-server.json"
-        owner: grafana
-        group: grafana
-        mode: '0644'
-      when: dashboards_dir_check.stat.exists
+    # - name: "Copy Prometheus Overview dashboard"
+    #   copy:
+    #     src: "{{ role_path }}/dashboards/prometheus-overview.json"
+    #     dest: "{{ grafana_dashboards_dir }}/prometheus-overview.json"
+    #     owner: grafana
+    #     group: grafana
+    #     mode: '0644'
+    #   when: dashboards_dir_check.stat.exists
 
-    - name: "Copy System Monitoring dashboard"
-      copy:
-        src: "{{ role_path }}/dashboards/system-monitoring.json"
-        dest: "{{ grafana_dashboards_dir }}/system-monitoring.json"
-        owner: grafana
-        group: grafana
-        mode: '0644'
-      when: dashboards_dir_check.stat.exists
+    # - name: "Copy Zabbix Server dashboard"
+    #   copy:
+    #     src: "{{ role_path }}/dashboards/zabbix-server.json"
+    #     dest: "{{ grafana_dashboards_dir }}/zabbix-server.json"
+    #     owner: grafana
+    #     group: grafana
+    #     mode: '0644'
+    #   when: dashboards_dir_check.stat.exists
 
-    - name: "Copy Security Monitoring dashboard"
-      copy:
-        src: "{{ role_path }}/dashboards/security-monitoring.json"
-        dest: "{{ grafana_dashboards_dir }}/security-monitoring.json"
-        owner: grafana
-        group: grafana
-        mode: '0644'
-      when: dashboards_dir_check.stat.exists
+    # - name: "Copy System Monitoring dashboard"
+    #   copy:
+    #     src: "{{ role_path }}/dashboards/system-monitoring.json"
+    #     dest: "{{ grafana_dashboards_dir }}/system-monitoring.json"
+    #     owner: grafana
+    #     group: grafana
+    #     mode: '0644'
+    #   when: dashboards_dir_check.stat.exists
+
+    # - name: "Copy Security Monitoring dashboard"
+    #   copy:
+    #     src: "{{ role_path }}/dashboards/security-monitoring.json"
+    #     dest: "{{ grafana_dashboards_dir }}/security-monitoring.json"
+    #     owner: grafana
+    #     group: grafana
+    #     mode: '0644'
+    #   when: dashboards_dir_check.stat.exists
   rescue:
     - name: "Dashboard copy warning"
       debug:

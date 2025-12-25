@@ -1,0 +1,28 @@
+---
+# Suricata service handlers
+
+- name: restart suricata
+  ansible.builtin.systemd:
+    name: suricata
+    state: restarted
+    daemon_reload: yes
+
+- name: reload suricata
+  ansible.builtin.systemd:
+    name: suricata
+    state: reloaded
+
+- name: restart httpd
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+
+- name: restart NetworkManager
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: restarted
+  ignore_errors: yes
+
+- name: systemd daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: yes

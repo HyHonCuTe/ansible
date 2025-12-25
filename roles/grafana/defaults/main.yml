@@ -40,26 +40,29 @@ grafana_datasources:
     type: "prometheus"
     access: "proxy"
     url: "{{ prometheus_url }}"
+    uid: "prometheus"
     is_default: true
     editable: true
     json_data:
       httpMethod: "POST"
       timeInterval: "30s"
   
-  - name: "Zabbix"
-    type: "alexanderzobnin-zabbix-datasource"
-    access: "proxy"
-    url: "{{ zabbix_url }}"
-    is_default: false
-    editable: true
-    json_data:
-      username: "{{ zabbix_username }}"
-      trends: true
-      trendsFrom: "7d"
-      trendsRange: "4d"
-      cacheTTL: "1h"
-    secure_json_data:
-      password: "{{ zabbix_password }}"
+  # Disabled until Zabbix plugin is installed
+  # - name: "Zabbix"
+  #   type: "alexanderzobnin-zabbix-datasource"
+  #   access: "proxy"
+  #   url: "{{ zabbix_url }}"
+  #   uid: "zabbix"
+  #   is_default: false
+  #   editable: true
+  #   json_data:
+  #     username: "{{ zabbix_username }}"
+  #     trends: true
+  #     trendsFrom: "7d"
+  #     trendsRange: "4d"
+  #     cacheTTL: "1h"
+  #   secure_json_data:
+  #     password: "{{ zabbix_password }}"
 
 # Grafana Plugins to Install
 grafana_plugins:
@@ -86,15 +89,43 @@ grafana_security:
   cookie_secure: false
   cookie_samesite: "lax"
 
-# SMTP/Email Settings (Optional)
-grafana_smtp_enabled: false
-grafana_smtp_host: "localhost:25"
-grafana_smtp_from_address: "grafana@example.com"
-grafana_smtp_from_name: "Grafana"
+# SMTP/Email Settings for Alerting
+grafana_smtp_enabled: true
+grafana_smtp_host: "smtp.gmail.com:587"
+grafana_smtp_user: "your-email@gmail.com"
+grafana_smtp_password: "your-app-password"
+grafana_smtp_from_address: "grafana-alerts@example.com"
+grafana_smtp_from_name: "Grafana Monitoring System"
+grafana_smtp_skip_verify: false
 
 # Alert Configuration
 grafana_alerting_enabled: true
 grafana_alerting_execute_alerts: true
+
+# Alert Notification Channels
+grafana_notification_channels:
+  - name: "Email Alerts - High Priority"
+    type: "email"
+    is_default: true
+    send_reminder: true
+    frequency: "30m"
+    settings:
+      addresses: "vodaohuyhoang@gmail.com;vodaohuyhoang1@gmail.com"
+      autoResolve: true
+      uploadImage: false
+
+# Alert Rules Thresholds
+grafana_alert_thresholds:
+  cpu_warning: 80
+  cpu_critical: 90
+  memory_warning: 80
+  memory_critical: 90
+  disk_warning: 80
+  disk_critical: 90
+  
+# Alert Evaluation Interval
+grafana_alert_evaluation_interval: "30s"
+grafana_alert_notification_timeout: "30s"
 
 # Service Settings
 grafana_service_enabled: true

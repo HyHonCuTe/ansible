@@ -1,0 +1,114 @@
+---
+# Deploy Suricata Web UI for alert visualization
+
+- name: "Install web server and PHP"
+  ansible.builtin.package:
+    name:
+      - httpd
+      - php
+      - php-json
+      - php-mbstring
+    state: present
+
+- name: "Create web UI directory"
+  ansible.builtin.file:
+    path: "{{ suricata_web_ui_path }}"
+    state: directory
+    owner: apache
+    group: apache
+    mode: '0755'
+
+- name: "Deploy alert viewer PHP script"
+  ansible.builtin.template:
+    src: index.php.j2
+    dest: "{{ suricata_web_ui_path }}/index.php"
+    owner: apache
+    group: apache
+    mode: '0644'
+
+- name: "Deploy CSS stylesheet"
+  ansible.builtin.copy:
+    src: style.css
+    dest: "{{ suricata_web_ui_path }}/style.css"
+    owner: apache
+    group: apache
+    mode: '0644'
+
+- name: "Create API endpoint for alerts"
+  ansible.builtin.template:
+    src: api.php.j2
+    dest: "{{ suricata_web_ui_path }}/api.php"
+    owner: apache
+    group: apache
+    mode: '0644'
+
+- name: "Set SELinux context for web files"
+  ansible.builtin.command: "restorecon -Rv {{ suricata_web_ui_path }}"
+  changed_when: false
+  when: ansible_selinux.status == "enabled"
+
+- name: "Allow Apache to read Suricata logs (SELinux)"
+  ansible.posix.seboolean:
+    name: "{{ item }}"
+    state: yes
+    persistent: yes
+  loop:
+    - httpd_can_network_connect
+    - httpd_read_user_content
+  when: ansible_selinux.status == "enabled"
+  ignore_errors: yes
+
+- name: "Add apache user to suricata group for log access"
+  ansible.builtin.user:
+    name: apache
+    groups: suricata
+    append: yes
+  notify: restart httpd
+
+- name: "Set proper permissions on Suricata log directory"
+  ansible.builtin.file:
+    path: "{{ suricata_log_dir }}"
+    state: directory
+    owner: root
+    group: suricata
+    mode: '0750'
+
+- name: "Set permissions on eve.json (will be created by Suricata)"
+  ansible.builtin.file:
+    path: "{{ suricata_log_dir }}/eve.json"
+    owner: root
+    group: suricata
+    mode: '0640'
+  when: false  # Skip - file created after Suricata starts
+
+- name: "Configure httpd for Suricata UI"
+  ansible.builtin.template:
+    src: suricata-ui.conf.j2
+    dest: /etc/httpd/conf.d/suricata-ui.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart httpd
+
+- name: "Start and enable httpd"
+  ansible.builtin.systemd:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: "Configure firewall for web UI"
+  ansible.posix.firewalld:
+    port: "{{ suricata_web_ui_port }}/tcp"
+    zone: public
+    state: enabled
+    permanent: yes
+    immediate: yes
+  when: firewall_enabled | bool
+  ignore_errors: yes
+
+- name: "Display Web UI access information"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Suricata Web UI deployed successfully!
+      🌐 Access URL: http://{{ ansible_host }}:{{ suricata_web_ui_port }}/
+      📊 Alerts will be displayed from: {{ suricata_log_dir }}/eve.json

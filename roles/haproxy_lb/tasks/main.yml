@@ -1,0 +1,76 @@
+---
+# HAProxy Installation and Configuration Tasks
+
+- name: "Install HAProxy"
+  ansible.builtin.package:
+    name: haproxy
+    state: present
+
+- name: "Backup original HAProxy config"
+  ansible.builtin.copy:
+    src: /etc/haproxy/haproxy.cfg
+    dest: /etc/haproxy/haproxy.cfg.backup
+    remote_src: yes
+    force: no
+
+- name: "Deploy HAProxy configuration"
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'haproxy -c -f %s'
+  notify: restart haproxy
+
+- name: "Configure rsyslog for HAProxy"
+  ansible.builtin.copy:
+    content: |
+      # HAProxy logging
+      local2.*    /var/log/haproxy.log
+    dest: /etc/rsyslog.d/haproxy.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart rsyslog
+
+- name: "Create HAProxy log file"
+  ansible.builtin.file:
+    path: /var/log/haproxy.log
+    state: touch
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: "Configure firewall for HAProxy"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ haproxy_firewall_ports }}"
+  when: firewall_enabled | bool
+
+- name: "Enable and start HAProxy service"
+  ansible.builtin.systemd:
+    name: haproxy
+    state: started
+    enabled: yes
+
+- name: "Verify HAProxy is running"
+  ansible.builtin.systemd:
+    name: haproxy
+    state: started
+  register: haproxy_status
+  failed_when: haproxy_status.status.ActiveState != "active"
+
+- name: "Display HAProxy configuration"
+  ansible.builtin.debug:
+    msg: |
+      ✅ HAProxy configured successfully
+      🌐 Listen IP: {{ ansible_host }}
+      🚪 Listen Port: {{ haproxy_listen_port }}
+      📊 Stats URL: http://{{ ansible_host }}:{{ haproxy_stats_port }}/stats
+      📊 Stats User: {{ haproxy_stats_user }}
+      ⚖️  Algorithm: {{ haproxy_balance_algorithm }}
+      🎯 Backend Servers: {{ haproxy_backend_servers | length }}

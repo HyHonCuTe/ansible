@@ -1,0 +1,57 @@
+! Configuration File for keepalived
+! Managed by Ansible - DO NOT EDIT MANUALLY
+! Generated: {{ ansible_date_time.iso8601 }}
+
+global_defs {
+    router_id {{ ansible_hostname }}
+{% if keepalived_enable_email %}
+    notification_email {
+{% for email in keepalived_notification_email %}
+        {{ email }}
+{% endfor %}
+    }
+    notification_email_from {{ keepalived_email_from }}
+    smtp_server {{ keepalived_smtp_server }}
+    smtp_connect_timeout {{ keepalived_smtp_connect_timeout }}
+{% endif %}
+    enable_script_security
+    script_user root
+}
+
+# Health check script
+vrrp_script check_haproxy {
+    script "{{ keepalived_check_script }}"
+    interval {{ keepalived_check_interval }}
+    weight {{ keepalived_check_weight }}
+    fall 2
+    rise 2
+}
+
+# VRRP instance
+vrrp_instance VI_1 {
+    state {{ keepalived_state }}
+    interface {{ keepalived_interface }}
+    virtual_router_id {{ keepalived_virtual_router_id }}
+    priority {{ keepalived_priority }}
+    advert_int {{ keepalived_advert_int }}
+    
+    authentication {
+        auth_type {{ keepalived_auth_type }}
+        auth_pass {{ keepalived_auth_pass }}
+    }
+    
+    virtual_ipaddress {
+        {{ keepalived_virtual_ip }}
+    }
+    
+    track_script {
+        check_haproxy
+    }
+{% if keepalived_enable_email %}
+    
+    # Email notifications
+    notify_master "/usr/local/bin/keepalived_notify.sh MASTER"
+    notify_backup "/usr/local/bin/keepalived_notify.sh BACKUP"
+    notify_fault "/usr/local/bin/keepalived_notify.sh FAULT"
+{% endif %}
+}

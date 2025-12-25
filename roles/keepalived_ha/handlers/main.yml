@@ -1,0 +1,12 @@
+---
+# handlers for keepalived_ha
+
+- name: restart keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    state: restarted
+
+- name: reload keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    state: reloaded

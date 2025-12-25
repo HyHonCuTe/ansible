@@ -1,0 +1,132 @@
+---
+# Deploy Active Directory Domain Services (ADDS)
+# For Windows Server 2016/2019/2022
+# Author: HyHonCuTe
+# Date: 2025-12-25
+
+- name: "Deploy Active Directory Domain Services"
+  hosts: ADDS_servers
+  gather_facts: yes
+  
+  vars_prompt:
+    - name: confirm_deployment
+      prompt: |
+        
+        ╔════════════════════════════════════════════════════════╗
+        ║     Active Directory Domain Services Deployment       ║
+        ╠════════════════════════════════════════════════════════╣
+        ║  WARNING: This will promote the server to a           ║
+        ║  Domain Controller and REBOOT the system!             ║
+        ║                                                        ║
+        ║  Domain: {{ adds_domain_name | default('company.local') }}
+        ║  NetBIOS: {{ adds_domain_netbios_name | default('COMPANY') }}
+        ║                                                        ║
+        ║  Do you want to continue? (yes/no)                    ║
+        ╚════════════════════════════════════════════════════════╝
+        
+      private: no
+      default: "no"
+
+  pre_tasks:
+    - name: "Validate deployment confirmation"
+      fail:
+        msg: "Deployment cancelled by user"
+      when: confirm_deployment | lower != "yes"
+    
+    - name: "Display deployment information"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║         ADDS Deployment Starting                      ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Target Host: {{ inventory_hostname }}
+          ║  OS: {{ ansible_os_name | default('Windows Server') }}
+          ║  Domain: {{ adds_domain_name | default('company.local') }}
+          ║  Installation Time: {{ ansible_date_time.iso8601 }}
+          ╚════════════════════════════════════════════════════════╝
+
+    - name: "Check system requirements"
+      win_shell: |
+        $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+        $disk = [math]::Round((Get-PSDrive C).Free / 1GB, 2)
+        $cpu = (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors
+        
+        Write-Output "RAM: $ram GB"
+        Write-Output "Free Disk Space: $disk GB"
+        Write-Output "CPU Cores: $cpu"
+        
+        if ($ram -lt 2) {
+          Write-Output "ERROR: Insufficient RAM (minimum 2GB required)"
+          exit 1
+        }
+        if ($disk -lt 10) {
+          Write-Output "ERROR: Insufficient disk space (minimum 10GB free required)"
+          exit 1
+        }
+        Write-Output "System requirements: PASSED"
+      register: system_check
+
+    - name: "Display system check results"
+      debug:
+        msg: |
+          ✅ System Requirements Check:
+          {{ system_check.stdout_lines | join('\n          ') }}
+
+  roles:
+    - role: adds
+      tags:
+        - adds
+        - active_directory
+
+  post_tasks:
+    - name: "Final validation and summary"
+      win_shell: |
+        try {
+          Import-Module ActiveDirectory
+          $domain = Get-ADDomain
+          $forest = Get-ADForest
+          
+          Write-Output "╔════════════════════════════════════════════════════════╗"
+          Write-Output "║      ADDS Deployment Summary                          ║"
+          Write-Output "╠════════════════════════════════════════════════════════╣"
+          Write-Output "║  Domain FQDN: $($domain.DNSRoot)"
+          Write-Output "║  NetBIOS Name: $($domain.NetBIOSName)"
+          Write-Output "║  Domain Mode: $($domain.DomainMode)"
+          Write-Output "║  Forest Mode: $($forest.ForestMode)"
+          Write-Output "║  Domain Controller: $($env:COMPUTERNAME)"
+          Write-Output "║  Domain SID: $($domain.DomainSID)"
+          Write-Output "╠════════════════════════════════════════════════════════╣"
+          Write-Output "║  Status: ✅ OPERATIONAL                              ║"
+          Write-Output "╚════════════════════════════════════════════════════════╝"
+        } catch {
+          Write-Output "⚠️  Unable to retrieve domain information"
+        }
+      register: final_summary
+      ignore_errors: yes
+
+    - name: "Display deployment summary"
+      debug:
+        msg: "{{ final_summary.stdout_lines }}"
+      when: final_summary.stdout_lines is defined
+
+    - name: "Save deployment log"
+      win_shell: |
+        $log = @"
+        Active Directory Domain Services Deployment Log
+        ================================================
+        Deployment Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        Server: $env:COMPUTERNAME
+        Domain: {{ adds_domain_name }}
+        NetBIOS: {{ adds_domain_netbios_name }}
+        Ansible Controller: {{ ansible_env.HOSTNAME | default('Unknown') }}
+        
+        Deployment completed successfully!
+        "@
+        
+        $log | Out-File -FilePath "C:\ADDS_Deployment_Log.txt" -Encoding UTF8
+        Write-Output "Deployment log saved to: C:\ADDS_Deployment_Log.txt"
+      register: log_save
+
+    - name: "Display log location"
+      debug:
+        msg: "{{ log_save.stdout }}"

@@ -1,0 +1,70 @@
+---
+# ADDS Main Tasks
+# Deploy Active Directory Domain Services on Windows Server 2016
+# Author: HyHonCuTe
+
+- name: "Display ADDS deployment banner"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║   🚀 Active Directory Domain Services Deployment      ║
+      ║   Domain: {{ adds_domain_name }}                       
+      ║   NetBIOS: {{ adds_domain_netbios_name }}              
+      ║   Mode: {{ adds_domain_mode }}                         
+      ╚════════════════════════════════════════════════════════╝
+
+- name: "Check if system is Windows Server"
+  win_shell: |
+    (Get-WmiObject -Class Win32_OperatingSystem).Caption
+  register: os_check
+  changed_when: false
+
+- name: "Validate Windows Server version"
+  assert:
+    that:
+      - "'Windows Server' in os_check.stdout"
+    fail_msg: "This role requires Windows Server operating system"
+    success_msg: "Operating system validated: {{ os_check.stdout.strip() }}"
+
+- name: "Include installation tasks"
+  include_tasks: install.yml
+  tags:
+    - install
+    - adds_install
+
+- name: "Include domain configuration tasks"
+  include_tasks: configure_domain.yml
+  tags:
+    - configure
+    - adds_configure
+
+- name: "Include validation tasks"
+  include_tasks: validate.yml
+  when: adds_validate_installation | bool
+  tags:
+    - validate
+    - adds_validate
+
+- name: "Include post-configuration tasks"
+  include_tasks: post_config.yml
+  when: adds_create_default_ous | bool or adds_create_default_users | bool
+  tags:
+    - post_config
+    - adds_post_config
+
+- name: "Display completion message"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║   ✅ ADDS Deployment Completed Successfully!         ║
+      ║                                                        ║
+      ║   Domain: {{ adds_domain_name }}                       
+      ║   Administrator: {{ adds_domain_netbios_name }}\\Administrator
+      ║   DSRM Password: [CONFIGURED]                         ║
+      ║                                                        ║
+      ║   Next Steps:                                         ║
+      ║   1. Join computers to domain                         ║
+      ║   2. Create users and groups                          ║
+      ║   3. Configure Group Policies                         ║
+      ║   4. Set up DNS zones                                 ║
+      ╚════════════════════════════════════════════════════════╝

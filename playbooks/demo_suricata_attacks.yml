@@ -1,0 +1,204 @@
+---
+- name: "Suricata IDS Demo - Generate Test Alerts"
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    target_vip: "192.168.1.100"
+    target_web1: "192.168.1.27"
+    target_web2: "192.168.1.30"
+    ids_server: "192.168.1.26"
+
+  tasks:
+    - name: "Display demo information"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║         Suricata IDS Demo - Attack Simulation                ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  This playbook will simulate various attacks to demonstrate  ║
+          ║  Suricata IDS detection capabilities.                        ║
+          ║                                                               ║
+          ║  🎯 Targets:                                                  ║
+          ║     - VIP: {{ target_vip }}                                  
+          ║     - Web1: {{ target_web1 }}                                
+          ║     - Web2: {{ target_web2 }}                                
+          ║                                                               ║
+          ║  📊 Monitor alerts at:                                        ║
+          ║     http://{{ ids_server }}:8080/                            
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝
+
+    - name: "Demo 1: ICMP Ping Sweep"
+      ansible.builtin.debug:
+        msg: "🔍 Simulating ICMP ping sweep..."
+
+    - name: "Send ICMP pings"
+      ansible.builtin.command: "ping -c 5 {{ item }}"
+      loop:
+        - "{{ target_vip }}"
+        - "{{ target_web1 }}"
+        - "{{ target_web2 }}"
+      changed_when: false
+      ignore_errors: yes
+
+    - name: "Wait for alerts to be logged"
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: "Demo 2: Suspicious HTTP User-Agent"
+      ansible.builtin.debug:
+        msg: "🔍 Testing suspicious User-Agent detection..."
+
+    - name: "Send request with sqlmap User-Agent"
+      ansible.builtin.uri:
+        url: "http://{{ target_vip }}/"
+        method: GET
+        headers:
+          User-Agent: "sqlmap/1.0"
+        return_content: no
+        status_code: [200, 301, 302, 404]
+      ignore_errors: yes
+
+    - name: "Send request with Nikto scanner"
+      ansible.builtin.uri:
+        url: "http://{{ target_vip }}/"
+        method: GET
+        headers:
+          User-Agent: "Nikto/2.1.6"
+        return_content: no
+        status_code: [200, 301, 302, 404]
+      ignore_errors: yes
+
+    - name: "Demo 3: SQL Injection Attempts"
+      ansible.builtin.debug:
+        msg: "🔍 Testing SQL injection detection..."
+
+    - name: "Send SQL injection patterns"
+      ansible.builtin.uri:
+        url: "http://{{ target_vip }}/{{ item }}"
+        method: GET
+        return_content: no
+        status_code: [200, 301, 302, 404]
+      loop:
+        - "?id=1' OR '1'='1"
+        - "?id=1' UNION SELECT * FROM users--"
+        - "?id=1; DROP TABLE users--"
+      ignore_errors: yes
+
+    - name: "Demo 4: Directory Traversal"
+      ansible.builtin.debug:
+        msg: "🔍 Testing directory traversal detection..."
+
+    - name: "Send directory traversal attempts"
+      ansible.builtin.uri:
+        url: "http://{{ target_vip }}/{{ item }}"
+        method: GET
+        return_content: no
+        status_code: [200, 301, 302, 404]
+      loop:
+        - "../../../../etc/passwd"
+        - "..%2f..%2f..%2fetc%2fpasswd"
+        - "..%252f..%252fetc%252fpasswd"
+      ignore_errors: yes
+
+    - name: "Demo 5: XSS Attempts"
+      ansible.builtin.debug:
+        msg: "🔍 Testing XSS detection..."
+
+    - name: "Send XSS payloads"
+      ansible.builtin.uri:
+        url: "http://{{ target_vip }}/?search={{ item | urlencode }}"
+        method: GET
+        return_content: no
+        status_code: [200, 301, 302, 404]
+      loop:
+        - "<script>alert('XSS')</script>"
+        - "<img src=x onerror=alert('XSS')>"
+      ignore_errors: yes
+
+    - name: "Demo 6: Port Scan Simulation"
+      ansible.builtin.debug:
+        msg: "🔍 Simulating port scan (limited)..."
+
+    - name: "Scan common ports"
+      ansible.builtin.wait_for:
+        host: "{{ target_vip }}"
+        port: "{{ item }}"
+        timeout: 1
+      loop:
+        - 22
+        - 80
+        - 443
+        - 3306
+        - 8080
+      ignore_errors: yes
+
+    - name: "Wait for all alerts to be processed"
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: "Demo Summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║              Demo Attack Simulation Complete!                ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  ✅ Attacks Simulated:                                        ║
+          ║     - ICMP Ping Sweep                                        ║
+          ║     - Suspicious User-Agent (sqlmap, Nikto)                  ║
+          ║     - SQL Injection (OR 1=1, UNION SELECT)                   ║
+          ║     - Directory Traversal (../, encoded)                     ║
+          ║     - XSS Attempts                                           ║
+          ║     - Port Scanning                                          ║
+          ║                                                               ║
+          ║  📊 View Alerts:                                              ║
+          ║     http://{{ ids_server }}:8080/                            
+          ║                                                               ║
+          ║  🔍 Check Logs:                                               ║
+          ║     ssh ansible@{{ ids_server }}                            
+          ║     tail -f /var/log/suricata/eve.json                       ║
+          ║     tail -f /var/log/suricata/fast.log                       ║
+          ║                                                               ║
+          ║  💡 Next Steps:                                               ║
+          ║     1. Open web dashboard                                    ║
+          ║     2. Review detected alerts                                ║
+          ║     3. Analyze attack patterns                               ║
+          ║     4. Demonstrate IDS capabilities                          ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝
+
+- name: "Check Alerts on IDS Server"
+  hosts: security_servers
+  become: yes
+  gather_facts: no
+  
+  vars:
+    suricata_log_dir: "/var/log/suricata"
+
+  tasks:
+    - name: "Count total alerts generated"
+      ansible.builtin.shell: "grep '\"event_type\":\"alert\"' {{ suricata_log_dir }}/eve.json | wc -l"
+      register: total_alerts
+      changed_when: false
+
+    - name: "Get recent alert signatures"
+      ansible.builtin.shell: |
+        tail -100 {{ suricata_log_dir }}/eve.json | \
+        grep '\"event_type\":\"alert\"' | \
+        jq -r '.alert.signature' 2>/dev/null | \
+        sort | uniq -c | sort -rn
+      register: alert_summary
+      changed_when: false
+      failed_when: false
+
+    - name: "Display alert summary"
+      ansible.builtin.debug:
+        msg: |
+          📊 Alert Summary:
+          Total Alerts: {{ total_alerts.stdout }}
+          
+          Top Detected Signatures:
+          {{ alert_summary.stdout }}

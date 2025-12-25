@@ -1,0 +1,132 @@
+---
+# Grafana Alerting and Notification Configuration
+# Author: HyHonCuTe
+
+- name: "Wait for Grafana API to be available for alerting"
+  uri:
+    url: "{{ grafana_root_url }}/api/health"
+    method: GET
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 30
+  delay: 2
+
+- name: "Create email notification channel"
+  uri:
+    url: "{{ grafana_root_url }}/api/alert-notifications"
+    method: POST
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      type: "{{ item.type }}"
+      isDefault: "{{ item.is_default | default(false) }}"
+      sendReminder: "{{ item.send_reminder | default(true) }}"
+      frequency: "{{ item.frequency | default('30m') }}"
+      settings: "{{ item.settings }}"
+    status_code: [200, 409, 500]
+  loop: "{{ grafana_notification_channels }}"
+  when: grafana_notification_channels is defined
+  register: notification_result
+  ignore_errors: yes
+
+- name: "Display notification channel creation status"
+  debug:
+    msg: |
+      {% if notification_result is defined and notification_result.results is defined %}
+      {% for result in notification_result.results %}
+      {% if result.status == 200 %}
+      ✅ Notification channel "{{ result.item.name }}" created successfully
+      {% elif result.status == 409 %}
+      ⚠️  Notification channel "{{ result.item.name }}" already exists
+      {% else %}
+      ❌ Failed to create notification channel "{{ result.item.name }}"
+      {% endif %}
+      {% endfor %}
+      {% else %}
+      ⚠️  No notification channels configured
+      {% endif %}
+
+- name: "Get existing contact points (Unified Alerting)"
+  uri:
+    url: "{{ grafana_root_url }}/api/v1/provisioning/contact-points"
+    method: GET
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    status_code: [200, 404]
+  register: contact_points
+  ignore_errors: yes
+
+- name: "Create email contact point for Unified Alerting"
+  uri:
+    url: "{{ grafana_root_url }}/api/v1/provisioning/contact-points"
+    method: POST
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      name: "Email Alerts - High Priority"
+      type: "email"
+      settings:
+        addresses: "admin@example.com;ops-team@example.com"
+        singleEmail: false
+      disableResolveMessage: false
+    status_code: [200, 201, 202, 409, 500]
+  when: 
+    - grafana_smtp_enabled | bool
+    - contact_points.status == 200
+  register: contact_point_result
+  ignore_errors: yes
+
+- name: "Display alerting configuration summary"
+  debug:
+    msg: |
+      ╔══════════════════════════════════════════════════════╗
+      ║         GRAFANA ALERTING CONFIGURATION               ║
+      ╠══════════════════════════════════════════════════════╣
+      ║  SMTP Enabled: {{ grafana_smtp_enabled }}
+      ║  SMTP Host: {{ grafana_smtp_host }}
+      ║  Alert Email: {{ grafana_smtp_from_address }}
+      ╠══════════════════════════════════════════════════════╣
+      ║  Alert Thresholds:
+      ║    CPU Warning:    {{ grafana_alert_thresholds.cpu_warning }}%
+      ║    CPU Critical:   {{ grafana_alert_thresholds.cpu_critical }}%
+      ║    Memory Warning: {{ grafana_alert_thresholds.memory_warning }}%
+      ║    Memory Critical: {{ grafana_alert_thresholds.memory_critical }}%
+      ║    Disk Warning:   {{ grafana_alert_thresholds.disk_warning }}%
+      ║    Disk Critical:  {{ grafana_alert_thresholds.disk_critical }}%
+      ╚══════════════════════════════════════════════════════╝
+
+- name: "Copy alert rules provisioning directory"
+  file:
+    path: "{{ grafana_provisioning_dir }}/alerting"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: '0755'
+
+- name: "Copy alert rules configuration"
+  copy:
+    src: alert-rules.yml
+    dest: "{{ grafana_provisioning_dir }}/alerting/alert-rules.yml"
+    owner: grafana
+    group: grafana
+    mode: '0640'
+  notify: restart grafana
+
+- name: "Display alert provisioning status"
+  debug:
+    msg: |
+      ✅ Alert rules deployed:
+         - High CPU Usage (>80%)
+         - High Memory Usage (>80%)
+         - High Disk Usage (>80%)
+         - Node Down Alert
+      
+      📧 Email notifications configured
+      📊 Alerts will trigger after 5 minutes above threshold

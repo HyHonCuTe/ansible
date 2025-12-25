@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MariaDB Replication Demo - {{ server_name }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, {{ server_color }} 0%, #2c3e50 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .server-badge {
+            background: {{ server_color }};
+            color: white;
+            padding: 10px 30px;
+            border-radius: 50px;
+            display: inline-block;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        .db-badge {
+            background: {% if db_role == 'primary' %}#e74c3c{% else %}#3498db{% endif %};
+            color: white;
+            padding: 8px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            font-size: 1em;
+            margin-left: 10px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid {{ server_color }};
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+        }
+        
+        input[type="text"],
+        input[type="email"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus,
+        input[type="email"]:focus {
+            outline: none;
+            border-color: {{ server_color }};
+        }
+        
+        .btn {
+            background: {{ server_color }};
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: {{ server_color }};
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #f5f5f5;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid {{ server_color }};
+        }
+        
+        .info-label {
+            font-size: 0.85em;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .info-value {
+            font-size: 1.3em;
+            color: #2c3e50;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-running {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span class="server-badge">{{ server_name }}</span>
+            <span class="db-badge">
+                {% if db_role == 'primary' %}📝 PRIMARY{% else %}📖 REPLICA{% endif %}
+            </span>
+            <h1 style="margin-top: 15px; color: #2c3e50;">MariaDB Replication Demo</h1>
+            <p style="color: #7f8c8d; margin-top: 10px;">Real-time Database Synchronization Test</p>
+        </div>
+
+        <div class="alert alert-info">
+            <strong>ℹ️ How it works:</strong> Data entered on PRIMARY (Web1) automatically syncs to REPLICA (Web2) within seconds. 
+            Try adding data here and check on the other server!
+        </div>
+
+        <div class="info-grid">
+            <div class="info-box">
+                <div class="info-label">Server</div>
+                <div class="info-value">{{ ansible_hostname }}</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">IP Address</div>
+                <div class="info-value">{{ ansible_host }}</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Database Role</div>
+                <div class="info-value">
+                    <span class="status-indicator status-running"></span>
+                    {{ db_role | upper }}
+                </div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Database</div>
+                <div class="info-value">webapp_db</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>➕ Add New User</h2>
+            <form action="add_user.php" method="POST">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <button type="submit" class="btn">Add User</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>👥 Current Users in Database</h2>
+            <p style="color: #7f8c8d; margin-bottom: 15px;">
+                Reading from: <strong>{{ server_name }}</strong> ({{ db_role | upper }})
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Created On Server</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    <?php
+                    // Database connection
+                    $db_host = '127.0.0.1';
+                    $db_name = 'webapp_db';
+                    $db_user = 'webapp_user';
+                    $db_pass = 'Admin123@';
+                    
+                    try {
+                        $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
+                        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                        
+                        // Fetch all users
+                        $stmt = $pdo->query("SELECT id, username, email, server_name, created_at FROM users ORDER BY created_at DESC");
+                        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        
+                        if (count($users) > 0) {
+                            foreach ($users as $user) {
+                                echo "<tr>";
+                                echo "<td>" . htmlspecialchars($user['id']) . "</td>";
+                                echo "<td>" . htmlspecialchars($user['username']) . "</td>";
+                                echo "<td>" . htmlspecialchars($user['email']) . "</td>";
+                                echo "<td>" . htmlspecialchars($user['server_name']) . "</td>";
+                                echo "<td>" . htmlspecialchars($user['created_at']) . "</td>";
+                                echo "</tr>";
+                            }
+                        } else {
+                            echo "<tr><td colspan='5' style='text-align:center; color:#999;'>No users found. Add some users to test replication!</td></tr>";
+                        }
+                    } catch(PDOException $e) {
+                        echo "<tr><td colspan='5' style='text-align:center; color:red;'>Database Error: " . htmlspecialchars($e->getMessage()) . "</td></tr>";
+                    }
+                    ?>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>🔄 Replication Test Instructions</h2>
+            <ol style="line-height: 2; color: #555;">
+                <li><strong>Open both servers</strong> in separate browser tabs:
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>Primary: http://192.168.1.100 (refresh until you see WEB-1/PRIMARY)</li>
+                        <li>Replica: http://192.168.1.100 (refresh until you see WEB-2/REPLICA)</li>
+                    </ul>
+                </li>
+                <li><strong>Add a user</strong> on the PRIMARY server</li>
+                <li><strong>Refresh the REPLICA</strong> page - the new user should appear!</li>
+                <li><strong>Verify sync time</strong> - usually < 1 second</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

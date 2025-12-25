@@ -1,0 +1,99 @@
+---
+# MariaDB Replication Deployment Playbook
+# Deploy MariaDB with Primary-Replica replication on Web Servers
+# Author: Ansible Automation
+# Date: 2025-12-25
+
+- name: "Deploy MariaDB Primary Server"
+  hosts: web_servers[0]  # Web1 - Primary
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    mariadb_replication_role: "primary"
+    mariadb_server_id: 1
+  
+  tasks:
+    - name: "Display deployment banner - Primary"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      Deploying MariaDB Primary Server                 ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Host: {{ ansible_hostname }}
+          ║  IP: {{ ansible_host }}
+          ║  Role: PRIMARY
+          ║  Server ID: {{ mariadb_server_id }}
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Include mariadb_replication role"
+      ansible.builtin.include_role:
+        name: mariadb_replication
+
+- name: "Deploy MariaDB Replica Server"
+  hosts: web_servers[1]  # Web2 - Replica
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    mariadb_replication_role: "replica"
+    mariadb_server_id: 2
+  
+  tasks:
+    - name: "Display deployment banner - Replica"
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      Deploying MariaDB Replica Server                 ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Host: {{ ansible_hostname }}
+          ║  IP: {{ ansible_host }}
+          ║  Role: REPLICA
+          ║  Server ID: {{ mariadb_server_id }}
+          ║  Primary: {{ hostvars[groups['web_servers'][0]]['ansible_host'] }}
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Include mariadb_replication role"
+      ansible.builtin.include_role:
+        name: mariadb_replication
+
+- name: "Deployment Summary"
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    primary_host: "{{ hostvars[groups['web_servers'][0]]['ansible_host'] }}"
+    replica_host: "{{ hostvars[groups['web_servers'][1]]['ansible_host'] }}"
+  
+  tasks:
+    - name: "Display deployment summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║      MariaDB Replication Deployment Complete!                ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  🔵 PRIMARY Server:                                           ║
+          ║    - Host: {{ primary_host }} (Web1)
+          ║    - Server ID: 1                                             ║
+          ║    - Role: Read/Write                                         ║
+          ║                                                               ║
+          ║  🟢 REPLICA Server:                                           ║
+          ║    - Host: {{ replica_host }} (Web2)
+          ║    - Server ID: 2                                             ║
+          ║    - Role: Read-only (synced from Primary)                    ║
+          ║                                                               ║
+          ║  📊 Demo Database:                                            ║
+          ║    - Name: webapp_db                                          ║
+          ║    - User: webapp_user                                        ║
+          ║    - Tables: users, visits                                    ║
+          ║                                                               ║
+          ║  🔐 Credentials:                                              ║
+          ║    - Root Password: RootP@ssw0rd2025                          ║
+          ║    - App User: webapp_user / WebApp123!                       ║
+          ║                                                               ║
+          ║  ✅ Next Steps:                                               ║
+          ║    1. Verify replication: ansible-playbook verify_mariadb_replication.yml ║
+          ║    2. Test with web demo: ansible-playbook demo_mariadb_web.yml ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝

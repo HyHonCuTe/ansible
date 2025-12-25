@@ -1,0 +1,41 @@
+---
+# Configure Primary Server
+
+- name: "Create replication user on Primary"
+  community.mysql.mysql_user:
+    name: "{{ mariadb_replication_user }}"
+    password: "{{ mariadb_replication_password }}"
+    host: "%"
+    priv: "*.*:REPLICATION SLAVE"
+    state: present
+
+- name: "Flush privileges on Primary"
+  community.mysql.mysql_query:
+    query: "FLUSH PRIVILEGES"
+
+- name: "Get Primary status"
+  community.mysql.mysql_query:
+    query: "SHOW MASTER STATUS"
+  register: primary_status
+
+- name: "Display Primary status"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Primary server configured
+      📁 Binary Log File: {{ primary_status.query_result[0][0].File }}
+      📍 Binary Log Position: {{ primary_status.query_result[0][0].Position }}
+      👤 Replication User: {{ mariadb_replication_user }}
+      
+- name: "Save Primary status to file"
+  ansible.builtin.copy:
+    content: |
+      MASTER_LOG_FILE={{ primary_status.query_result[0][0].File }}
+      MASTER_LOG_POS={{ primary_status.query_result[0][0].Position }}
+    dest: /tmp/primary_status.txt
+    mode: '0644'
+
+- name: "Fetch Primary status to control node"
+  ansible.builtin.fetch:
+    src: /tmp/primary_status.txt
+    dest: /tmp/mariadb_primary_status_{{ inventory_hostname }}.txt
+    flat: yes

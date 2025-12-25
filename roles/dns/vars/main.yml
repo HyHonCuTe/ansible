@@ -141,12 +141,13 @@ reverse_records:
 dns_secondary_servers:
   - "192.168.193.11"
 
-# Cấu hình Zones
-dns_zone_parameters:
-  zone_type: "Primary"
-  dynamic_update: "None"
-  allow_zone_transfers: true
-  zone_transfer_servers: "{{ dns_secondary_servers }}"
+# Cấu hình Zones (default zone parameters)
+# NOTE: Duplicate key removed - using single definition below
+# dns_zone_parameters:
+#   zone_type: "Primary"
+#   dynamic_update: "None"
+#   allow_zone_transfers: true
+#   zone_transfer_servers: "{{ dns_secondary_servers }}"
 
 
 

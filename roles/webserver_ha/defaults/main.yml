@@ -1,0 +1,24 @@
+---
+# defaults file for webserver_ha
+
+# Web server configuration
+web_server_port: 80
+document_root: /var/www/html
+
+# Server identification
+server_name: "{{ ansible_hostname }}"
+server_color: "#2ecc71"  # Default green
+
+# Apache packages
+apache_packages:
+  - httpd
+  - mod_ssl
+
+# Firewall configuration
+firewall_enabled: true
+firewall_ports:
+  - 80/tcp
+  - 443/tcp
+
+# SELinux configuration
+selinux_mode: enforcing

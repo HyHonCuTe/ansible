@@ -1,0 +1,95 @@
+---
+# Install MariaDB
+
+- name: "Install MariaDB server and client"
+  ansible.builtin.package:
+    name:
+      - mariadb-server
+      - mariadb
+      - python3-PyMySQL
+    state: present
+
+- name: "Deploy MariaDB server configuration"
+  ansible.builtin.template:
+    src: mariadb.cnf.j2
+    dest: /etc/my.cnf.d/server.cnf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart mariadb
+
+- name: "Ensure MariaDB is started and enabled"
+  ansible.builtin.systemd:
+    name: mariadb
+    state: started
+    enabled: yes
+
+- name: "Configure firewall for MariaDB"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ mariadb_firewall_ports }}"
+  when: firewall_enabled | bool
+
+- name: "Check if root password is set"
+  ansible.builtin.shell: |
+    mysqladmin -u root status
+  register: mysql_root_status
+  failed_when: false
+  changed_when: false
+
+- name: "Set MariaDB root password (first time)"
+  community.mysql.mysql_user:
+    name: root
+    password: "{{ mariadb_root_password }}"
+    host: localhost
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    state: present
+  when: mysql_root_status.rc == 0
+
+- name: "Set root password for all hosts"
+  community.mysql.mysql_user:
+    name: root
+    password: "{{ mariadb_root_password }}"
+    host: "{{ item }}"
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    state: present
+  loop:
+    - '127.0.0.1'
+    - '::1'
+  when: mysql_root_status.rc == 0
+  ignore_errors: yes
+
+- name: "Create .my.cnf for root"
+  ansible.builtin.copy:
+    content: |
+      [client]
+      user=root
+      password={{ mariadb_root_password }}
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: "Remove anonymous users"
+  community.mysql.mysql_user:
+    name: ''
+    host_all: yes
+    state: absent
+
+- name: "Remove test database"
+  community.mysql.mysql_db:
+    name: test
+    state: absent
+  ignore_errors: yes
+
+- name: "Display installation status"
+  ansible.builtin.debug:
+    msg: |
+      ✅ MariaDB installed successfully
+      📍 Server ID: {{ mariadb_server_id }}
+      🎭 Role: {{ mariadb_replication_role | upper }}
+      🌐 Bind Address: {{ mariadb_bind_address }}
+      🚪 Port: {{ mariadb_port }}

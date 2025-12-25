@@ -1,0 +1,91 @@
+---
+# Configure network interface for Suricata
+
+- name: "Get network interface information"
+  ansible.builtin.command: "ip link show {{ suricata_interface }}"
+  register: interface_check
+  changed_when: false
+  failed_when: false
+
+- name: "Verify interface exists"
+  ansible.builtin.assert:
+    that:
+      - interface_check.rc == 0
+    fail_msg: "Interface {{ suricata_interface }} does not exist!"
+    success_msg: "Interface {{ suricata_interface }} found"
+
+- name: "Enable promiscuous mode on interface"
+  ansible.builtin.command: "ip link set {{ suricata_interface }} promisc on"
+  changed_when: false
+
+- name: "Check promiscuous mode status"
+  ansible.builtin.shell: "ip link show {{ suricata_interface }} | grep -i promisc"
+  register: promisc_check
+  changed_when: false
+  failed_when: false
+
+- name: "Display promiscuous mode status"
+  ansible.builtin.debug:
+    msg: "Promiscuous mode: {{ 'ENABLED' if 'PROMISC' in promisc_check.stdout else 'DISABLED' }}"
+
+- name: "Create NetworkManager config to ignore Suricata interface"
+  ansible.builtin.copy:
+    content: |
+      [device]
+      match-device=interface-name:{{ suricata_interface }}
+      managed=0
+    dest: /etc/NetworkManager/conf.d/suricata-interface.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart NetworkManager
+  when: ansible_service_mgr == "systemd"
+
+- name: "Create systemd service to enable promiscuous mode on boot"
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Enable promiscuous mode for Suricata IDS
+      After=network.target
+      Before=suricata.service
+      
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/sbin/ip link set {{ suricata_interface }} promisc on
+      RemainAfterExit=yes
+      
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/suricata-promisc.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: systemd daemon-reload
+
+- name: "Enable promiscuous mode service"
+  ansible.builtin.systemd:
+    name: suricata-promisc
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: "Disable offloading features on interface (for better packet capture)"
+  ansible.builtin.command: "ethtool -K {{ suricata_interface }} gro off lro off"
+  changed_when: false
+  failed_when: false
+
+- name: "Check interface offloading status"
+  ansible.builtin.command: "ethtool -k {{ suricata_interface }}"
+  register: offload_status
+  changed_when: false
+  failed_when: false
+
+- name: "Configure firewall for Suricata"
+  ansible.posix.firewalld:
+    zone: "{{ item }}"
+    state: enabled
+    permanent: yes
+    immediate: yes
+  loop: "{{ suricata_firewall_zones }}"
+  when: firewall_enabled | bool
+  ignore_errors: yes

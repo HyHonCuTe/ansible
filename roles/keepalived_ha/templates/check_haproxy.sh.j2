@@ -1,0 +1,29 @@
+#!/bin/bash
+#
+# HAProxy Health Check Script for Keepalived
+# Managed by Ansible - DO NOT EDIT MANUALLY
+#
+
+# Check if HAProxy process is running
+if ! pidof haproxy > /dev/null 2>&1; then
+    echo "HAProxy is not running"
+    exit 1
+fi
+
+# Check if HAProxy is listening on port {{ haproxy_listen_port | default(80) }}
+if ! netstat -tuln | grep -q ":{{ haproxy_listen_port | default(80) }} "; then
+    echo "HAProxy is not listening on port {{ haproxy_listen_port | default(80) }}"
+    exit 1
+fi
+
+# Optional: Check HAProxy stats socket
+if [ -S /var/lib/haproxy/stats ]; then
+    echo "show info" | socat stdio /var/lib/haproxy/stats > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "HAProxy stats socket check failed"
+        exit 1
+    fi
+fi
+
+# All checks passed
+exit 0

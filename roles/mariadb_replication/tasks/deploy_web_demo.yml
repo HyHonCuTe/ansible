@@ -1,0 +1,81 @@
+---
+# Deploy Web Demo Application
+
+- name: "Install PHP and MySQL extension"
+  ansible.builtin.package:
+    name:
+      - php
+      - php-mysqlnd
+      - php-pdo
+      - php-json
+    state: present
+
+- name: "Create web demo directory"
+  ansible.builtin.file:
+    path: /var/www/html/db-demo
+    state: directory
+    owner: apache
+    group: apache
+    mode: '0755'
+
+- name: "Deploy demo PHP files"
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /var/www/html/db-demo/
+    owner: apache
+    group: apache
+    mode: '0644'
+  loop:
+    - add_user.php
+
+- name: "Deploy index.php from template"
+  ansible.builtin.template:
+    src: index_db.php.j2
+    dest: /var/www/html/db-demo/index.php
+    owner: apache
+    group: apache
+    mode: '0644'
+
+- name: "Create simple redirect from root"
+  ansible.builtin.copy:
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <meta http-equiv="refresh" content="0; url=/db-demo/">
+          <title>Redirecting...</title>
+      </head>
+      <body>
+          <p>Redirecting to <a href="/db-demo/">DB Demo</a>...</p>
+      </body>
+      </html>
+    dest: /var/www/html/db-redirect.html
+    owner: apache
+    group: apache
+    mode: '0644'
+
+- name: "Restart Apache to load PHP"
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+
+- name: "Set SELinux boolean for Apache to connect to database"
+  ansible.posix.seboolean:
+    name: httpd_can_network_connect_db
+    state: yes
+    persistent: yes
+  when: ansible_selinux.status == "enabled"
+
+- name: "Set SELinux boolean for Apache network connect"
+  ansible.posix.seboolean:
+    name: httpd_can_network_connect
+    state: yes
+    persistent: yes
+  when: ansible_selinux.status == "enabled"
+
+- name: "Display web demo info"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Web demo deployed
+      🌐 Access at: http://{{ ansible_host }}/db-demo/
+      🌐 Via VIP: http://192.168.1.100/db-demo/

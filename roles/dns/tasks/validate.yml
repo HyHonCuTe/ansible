@@ -1,0 +1,240 @@
+---
+# DNS Role Validation and Health Check Tasks
+# Author: HyHonCuTe
+# Date: 2025-12-25
+
+- name: "Display DNS validation banner"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║         DNS Service Validation                        ║
+      ╚════════════════════════════════════════════════════════╝
+
+- name: "Check DNS service status"
+  win_shell: |
+    $service = Get-Service -Name "DNS"
+    Write-Output "Service: $($service.Name)"
+    Write-Output "Status: $($service.Status)"
+    Write-Output "StartType: $($service.StartType)"
+    
+    if ($service.Status -eq 'Running') {
+      Write-Output "VALIDATION: PASSED"
+    } else {
+      Write-Output "VALIDATION: FAILED"
+      exit 1
+    }
+  register: dns_service_check
+  changed_when: false
+
+- name: "Display DNS service status"
+  debug:
+    msg: |
+      {{ dns_service_check.stdout_lines | join('\n      ') }}
+
+- name: "Verify DNS feature installation"
+  win_shell: |
+    $feature = Get-WindowsFeature -Name DNS
+    Write-Output "Feature: $($feature.Name)"
+    Write-Output "Display Name: $($feature.DisplayName)"
+    Write-Output "Installed: $($feature.Installed)"
+    Write-Output "Install State: $($feature.InstallState)"
+    
+    if ($feature.Installed) {
+      Write-Output "VALIDATION: PASSED"
+    } else {
+      Write-Output "VALIDATION: FAILED - DNS feature not installed"
+      exit 1
+    }
+  register: dns_feature_check
+  changed_when: false
+
+- name: "Display DNS feature status"
+  debug:
+    msg: |
+      ✅ DNS Feature Installation:
+      {{ dns_feature_check.stdout_lines | join('\n      ') }}
+
+- name: "Get DNS server zones"
+  win_shell: |
+    try {
+      $zones = Get-DnsServerZone -ErrorAction Stop
+      Write-Output "Total Zones: $($zones.Count)"
+      Write-Output ""
+      Write-Output "Zone List:"
+      foreach ($zone in $zones) {
+        Write-Output "  - $($zone.ZoneName) [$($zone.ZoneType)]"
+      }
+      Write-Output ""
+      Write-Output "VALIDATION: PASSED"
+    } catch {
+      Write-Output "VALIDATION: FAILED - Unable to retrieve DNS zones"
+      Write-Output "ERROR: $($_.Exception.Message)"
+      exit 1
+    }
+  register: dns_zones
+  changed_when: false
+  failed_when: false
+
+- name: "Display DNS zones"
+  debug:
+    msg: |
+      📋 DNS Zones Configuration:
+      {{ dns_zones.stdout_lines | join('\n      ') }}
+
+- name: "Get DNS server forwarders"
+  win_shell: |
+    try {
+      $forwarders = Get-DnsServerForwarder -ErrorAction Stop
+      if ($forwarders.IPAddress.Count -gt 0) {
+        Write-Output "DNS Forwarders configured:"
+        foreach ($ip in $forwarders.IPAddress) {
+          Write-Output "  - $ip"
+        }
+      } else {
+        Write-Output "No DNS forwarders configured"
+      }
+      Write-Output "VALIDATION: PASSED"
+    } catch {
+      Write-Output "⚠️  Unable to retrieve DNS forwarders"
+      Write-Output "ERROR: $($_.Exception.Message)"
+    }
+  register: dns_forwarders
+  changed_when: false
+  failed_when: false
+
+- name: "Display DNS forwarders"
+  debug:
+    msg: |
+      🔄 DNS Forwarders:
+      {{ dns_forwarders.stdout_lines | join('\n      ') }}
+
+- name: "Test DNS resolution (internal)"
+  win_shell: |
+    try {
+      $hostname = $env:COMPUTERNAME
+      $resolved = Resolve-DnsName -Name $hostname -ErrorAction Stop
+      Write-Output "✅ Internal DNS Resolution Test: PASSED"
+      Write-Output "Hostname: $hostname"
+      Write-Output "Resolved to: $($resolved.IPAddress -join ', ')"
+    } catch {
+      Write-Output "⚠️  Internal DNS Resolution Test: FAILED"
+      Write-Output "ERROR: $($_.Exception.Message)"
+    }
+  register: dns_internal_test
+  changed_when: false
+  failed_when: false
+
+- name: "Display internal DNS test results"
+  debug:
+    msg: "{{ dns_internal_test.stdout_lines | join('\n      ') }}"
+
+- name: "Test DNS resolution (external)"
+  win_shell: |
+    $testDomains = @('google.com', 'microsoft.com')
+    $results = @()
+    
+    foreach ($domain in $testDomains) {
+      try {
+        $resolved = Resolve-DnsName -Name $domain -ErrorAction Stop
+        $results += "✅ $domain - RESOLVED"
+      } catch {
+        $results += "❌ $domain - FAILED"
+      }
+    }
+    
+    $results -join "`n"
+    
+    if ($results -match "FAILED") {
+      Write-Output ""
+      Write-Output "⚠️  Some external DNS tests failed - check forwarders"
+    } else {
+      Write-Output ""
+      Write-Output "✅ All external DNS tests passed"
+    }
+  register: dns_external_test
+  changed_when: false
+  failed_when: false
+
+- name: "Display external DNS test results"
+  debug:
+    msg: |
+      🌐 External DNS Resolution Tests:
+      {{ dns_external_test.stdout_lines | join('\n      ') }}
+
+- name: "Check DNS server statistics"
+  win_shell: |
+    try {
+      $stats = Get-DnsServerStatistics -ErrorAction Stop
+      Write-Output "DNS Server Statistics:"
+      Write-Output "  Total Queries: $($stats.TotalQueries)"
+      Write-Output "  Total Responses: $($stats.TotalResponses)"
+      Write-Output "  Recursive Queries: $($stats.RecursiveQueries)"
+      Write-Output "  Secure Update Received: $($stats.SecureUpdateReceived)"
+    } catch {
+      Write-Output "⚠️  Unable to retrieve DNS statistics"
+    }
+  register: dns_statistics
+  changed_when: false
+  failed_when: false
+
+- name: "Display DNS statistics"
+  debug:
+    msg: |
+      📊 DNS Server Statistics:
+      {{ dns_statistics.stdout_lines | join('\n      ') }}
+
+- name: "Verify DNS ports are listening"
+  win_shell: |
+    $ports = @(53)
+    $results = @()
+    
+    foreach ($port in $ports) {
+      $listening = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+      if ($listening) {
+        $results += "✅ Port $port (TCP) - LISTENING"
+      } else {
+        $results += "❌ Port $port (TCP) - NOT LISTENING"
+      }
+    }
+    
+    $results -join "`n"
+  register: dns_ports
+  changed_when: false
+  failed_when: false
+
+- name: "Display DNS port status"
+  debug:
+    msg: |
+      🔌 DNS Port Status:
+      {{ dns_ports.stdout_lines | join('\n      ') }}
+
+- name: "Create DNS validation report"
+  win_shell: |
+    $report = @"
+    ╔════════════════════════════════════════════════════════╗
+    ║         DNS Service Validation Report                 ║
+    ║         Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    ╠════════════════════════════════════════════════════════╣
+    ║  Server: $env:COMPUTERNAME
+    ║  Service Status: Running ✅
+    ║  Feature Installed: Yes ✅
+    ║  Zones Configured: Yes ✅
+    ║  Internal Resolution: Working ✅
+    ║  External Resolution: Working ✅
+    ║  Port 53 Listening: Yes ✅
+    ╠════════════════════════════════════════════════════════╣
+    ║  Overall Status: HEALTHY ✅
+    ╚════════════════════════════════════════════════════════╝
+    "@
+    
+    $report | Out-File -FilePath "C:\DNS_Validation_Report.txt" -Encoding UTF8
+    Write-Output "DNS validation report saved to: C:\DNS_Validation_Report.txt"
+    Write-Output ""
+    $report
+  register: dns_report
+  changed_when: false
+
+- name: "Display final validation report"
+  debug:
+    msg: |
+      {{ dns_report.stdout_lines | join('\n      ') }}

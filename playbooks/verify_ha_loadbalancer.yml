@@ -1,0 +1,234 @@
+---
+# HA Load Balancer Verification and Testing Playbook
+# Test HAProxy + Keepalived + Web Servers
+# Author: Ansible Automation
+# Date: 2025-12-25
+
+- name: "Verify Backend Web Servers"
+  hosts: web_servers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: "Check Apache service status"
+      ansible.builtin.systemd:
+        name: httpd
+        state: started
+      register: apache_status
+      failed_when: apache_status.status.ActiveState != "active"
+    
+    - name: "Test Apache local response"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/"
+        return_content: yes
+      register: web_response
+      failed_when: server_name not in web_response.content
+    
+    - name: "Test health check endpoint"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/health.html"
+        return_content: yes
+      register: health_response
+      failed_when: "'OK' not in health_response.content"
+    
+    - name: "Display web server status"
+      ansible.builtin.debug:
+        msg: |
+          ✅ {{ server_name }} is healthy
+          🌐 Accessible at: http://{{ ansible_host }}
+          🏥 Health check: PASSED
+
+- name: "Verify HAProxy Load Balancers"
+  hosts: ha_servers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: "Check HAProxy service status"
+      ansible.builtin.systemd:
+        name: haproxy
+        state: started
+      register: haproxy_status
+      failed_when: haproxy_status.status.ActiveState != "active"
+    
+    - name: "Check HAProxy listening ports"
+      ansible.builtin.wait_for:
+        port: "{{ item }}"
+        state: started
+        timeout: 5
+      loop:
+        - 80
+        - 8080
+    
+    - name: "Test HAProxy stats page"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8080/stats"
+        user: admin
+        password: admin123
+        force_basic_auth: yes
+      register: stats_response
+      failed_when: stats_response.status != 200
+    
+    - name: "Display HAProxy status"
+      ansible.builtin.debug:
+        msg: |
+          ✅ HAProxy is running
+          📊 Stats page: http://{{ ansible_host }}:8080/stats
+          🚪 Listening on port 80
+
+- name: "Verify Keepalived HA"
+  hosts: ha_servers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: "Check Keepalived service status"
+      ansible.builtin.systemd:
+        name: keepalived
+        state: started
+      register: keepalived_status
+      failed_when: keepalived_status.status.ActiveState != "active"
+    
+    - name: "Check VIP assignment"
+      ansible.builtin.shell: |
+        ip addr show {{ ansible_default_ipv4.interface }} | grep {{ virtual_ip }}
+      register: vip_check
+      changed_when: false
+      failed_when: false
+    
+    - name: "Display Keepalived status"
+      ansible.builtin.debug:
+        msg: |
+          ✅ Keepalived is running
+          🔧 State: {{ keepalived_state }}
+          🎯 Priority: {{ keepalived_priority }}
+          {% if vip_check.rc == 0 %}
+          👑 VIP Status: MASTER (holding {{ virtual_ip }})
+          {% else %}
+          🛡️  VIP Status: BACKUP (standby mode)
+          {% endif %}
+
+- name: "Load Balancing Tests"
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    vip: "{{ hostvars[groups['ha_servers'][0]]['virtual_ip'] }}"
+    test_count: 10
+  
+  tasks:
+    - name: "Test connectivity to VIP"
+      ansible.builtin.uri:
+        url: "http://{{ vip }}/"
+        return_content: yes
+      register: vip_response
+      failed_when: vip_response.status != 200
+    
+    - name: "Perform load balancing test ({{ test_count }} requests)"
+      ansible.builtin.uri:
+        url: "http://{{ vip }}/"
+        return_content: yes
+      register: lb_test
+      loop: "{{ range(1, test_count + 1) | list }}"
+      loop_control:
+        pause: 0.5
+    
+    - name: "Analyze load distribution"
+      ansible.builtin.set_fact:
+        web1_count: "{{ lb_test.results | selectattr('content', 'search', 'WEB-1') | list | length }}"
+        web2_count: "{{ lb_test.results | selectattr('content', 'search', 'WEB-2') | list | length }}"
+    
+    - name: "Display load balancing results"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║      Load Balancing Test Results                             ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║  Total Requests: {{ test_count }}
+          ║  WEB-1 Responses: {{ web1_count }} ({{ (web1_count | int * 100 / test_count | int) | round(1) }}%)
+          ║  WEB-2 Responses: {{ web2_count }} ({{ (web2_count | int * 100 / test_count | int) | round(1) }}%)
+          ║  
+          ║  {% if (web1_count | int - web2_count | int) | abs <= 2 %}✅ Load balancing is working correctly!{% else %}⚠️  Load distribution is unbalanced{% endif %}
+          ╚═══════════════════════════════════════════════════════════════╝
+
+- name: "High Availability Failover Test Instructions"
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    vip: "{{ hostvars[groups['ha_servers'][0]]['virtual_ip'] }}"
+    master_host: "{{ groups['ha_servers'] | map('extract', hostvars) | selectattr('keepalived_state', 'equalto', 'MASTER') | map(attribute='ansible_host') | first }}"
+    backup_host: "{{ groups['ha_servers'] | map('extract', hostvars) | selectattr('keepalived_state', 'equalto', 'BACKUP') | map(attribute='ansible_host') | first }}"
+  
+  tasks:
+    - name: "Display failover test instructions"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║      HA Failover Test Instructions                           ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  Current Configuration:                                       ║
+          ║    - VIP: {{ vip }}
+          ║    - MASTER: {{ master_host }}
+          ║    - BACKUP: {{ backup_host }}
+          ║                                                               ║
+          ║  Manual Failover Test:                                        ║
+          ║                                                               ║
+          ║  1️⃣  Monitor VIP in a separate terminal:                     ║
+          ║     watch -n 1 "curl -s http://{{ vip }}"
+          ║                                                               ║
+          ║  2️⃣  Stop HAProxy on MASTER ({{ master_host }}):
+          ║     ssh {{ master_host }}
+          ║     sudo systemctl stop haproxy
+          ║                                                               ║
+          ║  3️⃣  Observe VIP failover to BACKUP                          ║
+          ║     The curl command should continue working                 ║
+          ║                                                               ║
+          ║  4️⃣  Check VIP assignment on BACKUP:                         ║
+          ║     ssh {{ backup_host }}
+          ║     ip addr show | grep {{ vip }}
+          ║                                                               ║
+          ║  5️⃣  Restore MASTER:                                         ║
+          ║     ssh {{ master_host }}
+          ║     sudo systemctl start haproxy
+          ║                                                               ║
+          ║  Expected Result:                                             ║
+          ║    ✅ No downtime during failover                            ║
+          ║    ✅ VIP moves to BACKUP automatically                      ║
+          ║    ✅ Service continues on new MASTER                        ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝
+
+- name: "Final Status Summary"
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    vip: "{{ hostvars[groups['ha_servers'][0]]['virtual_ip'] }}"
+    ha1_host: "{{ hostvars[groups['ha_servers'][0]]['ansible_host'] }}"
+    ha2_host: "{{ hostvars[groups['ha_servers'][1]]['ansible_host'] }}"
+  
+  tasks:
+    - name: "Display final summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║      HA Load Balancer - System Status                        ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  🌐 Access Point: http://{{ vip }}
+          ║                                                               ║
+          ║  📊 Monitoring URLs:                                          ║
+          ║    - HAProxy Stats: http://{{ ha1_host }}:8080/stats
+          ║    - HAProxy Stats: http://{{ ha2_host }}:8080/stats
+          ║                                                               ║
+          ║  🔍 Quick Check Commands:                                     ║
+          ║    - curl http://{{ vip }}
+          ║    - for i in {1..10}; do curl -s http://{{ vip }} | grep WEB; done
+          ║    - ip addr show | grep {{ vip }}  (on HA nodes)
+          ║    - systemctl status haproxy keepalived                      ║
+          ║                                                               ║
+          ║  ✅ All Services Verified                                     ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝

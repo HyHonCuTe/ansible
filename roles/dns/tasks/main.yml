@@ -12,3 +12,9 @@
 
 - name: Xóa DNS cache
   import_tasks: flush_dns_cache.yml
+
+- name: Validate DNS deployment
+  import_tasks: validate.yml
+  tags:
+    - validate
+    - dns_validate

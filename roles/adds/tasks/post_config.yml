@@ -1,0 +1,155 @@
+---
+# ADDS Post-Configuration Tasks
+# Create OUs, users, and groups
+
+- name: "Create Organizational Units"
+  win_shell: |
+    try {
+      Import-Module ActiveDirectory
+      $baseDN = (Get-ADDomain).DistinguishedName
+      
+      {% for ou in adds_organizational_units %}
+      {% if ou.path %}
+      $ouPath = "{{ ou.path }},$baseDN"
+      {% else %}
+      $ouPath = $baseDN
+      {% endif %}
+      
+      $ouName = "{{ ou.name }}"
+      $ouDN = "OU=$ouName,$ouPath"
+      
+      if (-not (Get-ADOrganizationalUnit -Filter "DistinguishedName -eq '$ouDN'" -ErrorAction SilentlyContinue)) {
+        New-ADOrganizationalUnit -Name $ouName -Path $ouPath -Description "{{ ou.description }}" -ProtectedFromAccidentalDeletion $true
+        Write-Output "Created OU: $ouDN"
+      } else {
+        Write-Output "OU already exists: $ouDN"
+      }
+      {% endfor %}
+      
+      Write-Output "OU creation completed"
+    } catch {
+      Write-Output "ERROR: $($_.Exception.Message)"
+      exit 1
+    }
+  register: ou_creation
+  when: adds_create_default_ous | bool
+
+- name: "Display OU creation results"
+  debug:
+    msg: |
+      ✅ Organizational Units created:
+      {{ ou_creation.stdout_lines | join('\n      ') }}
+  when: 
+    - adds_create_default_ous | bool
+    - ou_creation is defined
+
+- name: "Create default users"
+  win_shell: |
+    try {
+      Import-Module ActiveDirectory
+      $baseDN = (Get-ADDomain).DistinguishedName
+      
+      {% for user in adds_default_users %}
+      $username = "{{ user.username }}"
+      $password = ConvertTo-SecureString "{{ user.password }}" -AsPlainText -Force
+      $ouPath = "{{ user.ou }},$baseDN"
+      
+      if (-not (Get-ADUser -Filter "SamAccountName -eq '$username'" -ErrorAction SilentlyContinue)) {
+        New-ADUser -SamAccountName $username `
+                   -UserPrincipalName "$username@{{ adds_domain_name }}" `
+                   -Name "$username" `
+                   -GivenName "{{ user.firstname }}" `
+                   -Surname "{{ user.lastname }}" `
+                   -DisplayName "{{ user.firstname }} {{ user.lastname }}" `
+                   -Description "{{ user.description }}" `
+                   -Path $ouPath `
+                   -AccountPassword $password `
+                   -Enabled $true `
+                   -PasswordNeverExpires $true `
+                   -ChangePasswordAtLogon $false
+        
+        {% if user.groups is defined %}
+        {% for group in user.groups %}
+        Add-ADGroupMember -Identity "{{ group }}" -Members $username -ErrorAction SilentlyContinue
+        {% endfor %}
+        {% endif %}
+        
+        Write-Output "Created user: $username"
+      } else {
+        Write-Output "User already exists: $username"
+      }
+      {% endfor %}
+      
+      Write-Output "User creation completed"
+    } catch {
+      Write-Output "ERROR: $($_.Exception.Message)"
+      exit 1
+    }
+  register: user_creation
+  when: adds_create_default_users | bool
+  no_log: true
+
+- name: "Display user creation results"
+  debug:
+    msg: |
+      ✅ Users created successfully
+  when: 
+    - adds_create_default_users | bool
+    - user_creation is defined
+
+- name: "Create default security groups"
+  win_shell: |
+    try {
+      Import-Module ActiveDirectory
+      $baseDN = (Get-ADDomain).DistinguishedName
+      
+      {% for group in adds_default_groups %}
+      $groupName = "{{ group.name }}"
+      $ouPath = "{{ group.ou }},$baseDN"
+      
+      if (-not (Get-ADGroup -Filter "Name -eq '$groupName'" -ErrorAction SilentlyContinue)) {
+        New-ADGroup -Name $groupName `
+                    -GroupScope "{{ group.scope }}" `
+                    -GroupCategory "{{ group.category }}" `
+                    -Path $ouPath `
+                    -Description "{{ group.description }}"
+        
+        Write-Output "Created group: $groupName"
+      } else {
+        Write-Output "Group already exists: $groupName"
+      }
+      {% endfor %}
+      
+      Write-Output "Group creation completed"
+    } catch {
+      Write-Output "ERROR: $($_.Exception.Message)"
+      exit 1
+    }
+  register: group_creation
+  when: adds_create_default_groups | bool
+
+- name: "Display group creation results"
+  debug:
+    msg: |
+      ✅ Security groups created:
+      {{ group_creation.stdout_lines | join('\n      ') }}
+  when: 
+    - adds_create_default_groups | bool
+    - group_creation is defined
+
+- name: "Display post-configuration summary"
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════╗
+      ║      Post-Configuration Completed                     ║
+      ╠════════════════════════════════════════════════════════╣
+      {% if adds_create_default_ous | bool %}
+      ║  ✅ Organizational Units: Created
+      {% endif %}
+      {% if adds_create_default_users | bool %}
+      ║  ✅ Default Users: Created
+      {% endif %}
+      {% if adds_create_default_groups | bool %}
+      ║  ✅ Security Groups: Created
+      {% endif %}
+      ╚════════════════════════════════════════════════════════╝

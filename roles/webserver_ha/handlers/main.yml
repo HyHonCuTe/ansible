@@ -1,0 +1,12 @@
+---
+# handlers for webserver_ha
+
+- name: restart apache
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+
+- name: reload apache
+  ansible.builtin.systemd:
+    name: httpd
+    state: reloaded

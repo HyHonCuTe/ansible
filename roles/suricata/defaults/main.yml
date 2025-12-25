@@ -1,0 +1,48 @@
+---
+# Suricata IDS Configuration Variables
+
+# Network Configuration
+suricata_interface: "ens192"
+suricata_home_net: "[192.168.1.0/24]"
+suricata_external_net: "!$HOME_NET"
+
+# Installation
+suricata_version: "7.0"
+suricata_install_method: "package"  # package or source
+
+# Service
+suricata_service_state: "started"
+suricata_service_enabled: yes
+
+# Logging
+suricata_log_dir: "/var/log/suricata"
+suricata_eve_log_enabled: yes
+suricata_eve_log_types:
+  - alert
+  - http
+  - dns
+  - tls
+  - files
+  - ssh
+
+# Rules Configuration
+suricata_enable_rule_update: yes
+suricata_rule_sources:
+  - "et/open"
+suricata_custom_rules_enabled: yes
+
+# Performance Tuning
+suricata_af_packet_threads: 2
+suricata_detect_threads: 2
+suricata_stream_memcap: "128mb"
+suricata_flow_memcap: "128mb"
+
+# Firewall
+firewall_enabled: yes
+suricata_firewall_zones:
+  - public
+
+# Web UI
+suricata_web_ui_enabled: yes
+suricata_web_ui_port: 8080
+suricata_web_ui_path: "/var/www/html/suricata-ui"

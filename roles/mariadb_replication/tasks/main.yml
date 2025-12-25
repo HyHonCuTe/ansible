@@ -1,0 +1,17 @@
+---
+# MariaDB Replication - Main Tasks
+
+- name: "Include installation tasks"
+  ansible.builtin.include_tasks: install.yml
+
+- name: "Configure Primary server"
+  ansible.builtin.include_tasks: configure_primary.yml
+  when: mariadb_replication_role == "primary"
+
+- name: "Configure Replica server"
+  ansible.builtin.include_tasks: configure_replica.yml
+  when: mariadb_replication_role == "replica"
+
+- name: "Create demo database and tables"
+  ansible.builtin.include_tasks: create_demo_db.yml
+  when: mariadb_replication_role == "primary"

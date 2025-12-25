@@ -1,0 +1,249 @@
+---
+# Configure DNS Zones for ADDS Domain
+# Author: HyHonCuTe
+# Date: 2025-12-25
+
+- name: "Configure DNS Zones for ADDS Domain"
+  hosts: ADDS_servers
+  gather_facts: no
+  
+  vars:
+    domain_name: "corp.hyhon.io.vn"
+    dc_ip: "192.168.1.18"
+    reverse_zone: "1.168.192.in-addr.arpa"
+    
+  tasks:
+    - name: "Display DNS configuration banner"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      DNS Zone Configuration for ADDS Domain           ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Domain: {{ domain_name }}
+          ║  DC IP: {{ dc_ip }}
+          ║  Reverse Zone: {{ reverse_zone }}
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Check if forward zone exists"
+      win_shell: |
+        try {
+          $zone = Get-DnsServerZone -Name "{{ domain_name }}" -ErrorAction Stop
+          Write-Output "EXISTS"
+        } catch {
+          Write-Output "NOT_EXISTS"
+        }
+      register: forward_zone_check
+      changed_when: false
+    
+    - name: "Create forward DNS zone (if not exists)"
+      win_shell: |
+        Add-DnsServerPrimaryZone -Name "{{ domain_name }}" `
+          -ReplicationScope "Forest" `
+          -DynamicUpdate "Secure" `
+          -PassThru
+        Write-Output "Forward zone created: {{ domain_name }}"
+      when: "'NOT_EXISTS' in forward_zone_check.stdout"
+      register: forward_zone_created
+    
+    - name: "Display forward zone status"
+      debug:
+        msg: |
+          {% if forward_zone_created.changed %}
+          ✅ Forward zone created: {{ domain_name }}
+          {% else %}
+          ℹ️  Forward zone already exists: {{ domain_name }}
+          {% endif %}
+    
+    - name: "Add A record for domain root"
+      win_shell: |
+        # Remove existing record if any
+        Remove-DnsServerResourceRecord -ZoneName "{{ domain_name }}" `
+          -Name "@" -RRType "A" -Force -ErrorAction SilentlyContinue
+        
+        # Add new A record
+        Add-DnsServerResourceRecordA -Name "@" `
+          -ZoneName "{{ domain_name }}" `
+          -IPv4Address "{{ dc_ip }}" `
+          -TimeToLive 01:00:00
+        
+        Write-Output "A record added: @ -> {{ dc_ip }}"
+      register: a_record
+      changed_when: true
+    
+    - name: "Add A record for DC hostname"
+      win_shell: |
+        $hostname = $env:COMPUTERNAME.ToLower()
+        
+        # Remove existing record if any
+        Remove-DnsServerResourceRecord -ZoneName "{{ domain_name }}" `
+          -Name $hostname -RRType "A" -Force -ErrorAction SilentlyContinue
+        
+        # Add new A record
+        Add-DnsServerResourceRecordA -Name $hostname `
+          -ZoneName "{{ domain_name }}" `
+          -IPv4Address "{{ dc_ip }}" `
+          -TimeToLive 01:00:00
+        
+        Write-Output "A record added: $hostname -> {{ dc_ip }}"
+      register: dc_a_record
+      changed_when: true
+    
+    - name: "Add A record for www"
+      win_shell: |
+        # Remove existing record if any
+        Remove-DnsServerResourceRecord -ZoneName "{{ domain_name }}" `
+          -Name "www" -RRType "A" -Force -ErrorAction SilentlyContinue
+        
+        # Add new A record
+        Add-DnsServerResourceRecordA -Name "www" `
+          -ZoneName "{{ domain_name }}" `
+          -IPv4Address "{{ dc_ip }}" `
+          -TimeToLive 01:00:00
+        
+        Write-Output "A record added: www -> {{ dc_ip }}"
+      register: www_record
+      changed_when: true
+    
+    - name: "Check if reverse zone exists"
+      win_shell: |
+        try {
+          $zone = Get-DnsServerZone -Name "{{ reverse_zone }}" -ErrorAction Stop
+          Write-Output "EXISTS"
+        } catch {
+          Write-Output "NOT_EXISTS"
+        }
+      register: reverse_zone_check
+      changed_when: false
+    
+    - name: "Create reverse DNS zone (if not exists)"
+      win_shell: |
+        Add-DnsServerPrimaryZone -NetworkID "192.168.1.0/24" `
+          -ReplicationScope "Forest" `
+          -DynamicUpdate "Secure" `
+          -PassThru
+        Write-Output "Reverse zone created: {{ reverse_zone }}"
+      when: "'NOT_EXISTS' in reverse_zone_check.stdout"
+      register: reverse_zone_created
+    
+    - name: "Display reverse zone status"
+      debug:
+        msg: |
+          {% if reverse_zone_created.changed %}
+          ✅ Reverse zone created: {{ reverse_zone }}
+          {% else %}
+          ℹ️  Reverse zone already exists: {{ reverse_zone }}
+          {% endif %}
+    
+    - name: "Add PTR record for DC"
+      win_shell: |
+        # Remove existing PTR if any
+        Remove-DnsServerResourceRecord -ZoneName "{{ reverse_zone }}" `
+          -Name "18" -RRType "PTR" -Force -ErrorAction SilentlyContinue
+        
+        # Add PTR record
+        Add-DnsServerResourceRecordPtr -Name "18" `
+          -ZoneName "{{ reverse_zone }}" `
+          -PtrDomainName "{{ domain_name }}." `
+          -TimeToLive 01:00:00
+        
+        Write-Output "PTR record added: 18 -> {{ domain_name }}"
+      register: ptr_record
+      changed_when: true
+    
+    - name: "Configure DNS server to use itself as primary DNS"
+      win_shell: |
+        $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+        Set-DnsClientServerAddress -InterfaceAlias $adapter.Name -ServerAddresses "127.0.0.1","{{ dc_ip }}"
+        
+        Write-Output "DNS client configured to use: 127.0.0.1, {{ dc_ip }}"
+      register: dns_client_config
+      changed_when: true
+    
+    - name: "Flush DNS cache"
+      win_shell: |
+        Clear-DnsClientCache
+        ipconfig /flushdns
+        Write-Output "DNS cache flushed"
+      changed_when: false
+    
+    - name: "Verify DNS configuration"
+      win_shell: |
+        Write-Output "=== DNS Zones ==="
+        Get-DnsServerZone | Select-Object ZoneName, ZoneType | Format-Table -AutoSize
+        
+        Write-Output ""
+        Write-Output "=== Forward Zone Records ({{ domain_name }}) ==="
+        Get-DnsServerResourceRecord -ZoneName "{{ domain_name }}" | 
+          Select-Object HostName, RecordType, @{Name='RecordData';Expression={$_.RecordData.IPv4Address}} |
+          Format-Table -AutoSize
+        
+        Write-Output ""
+        Write-Output "=== Reverse Zone Records ({{ reverse_zone }}) ==="
+        Get-DnsServerResourceRecord -ZoneName "{{ reverse_zone }}" | 
+          Select-Object HostName, RecordType, @{Name='RecordData';Expression={$_.RecordData.PtrDomainName}} |
+          Format-Table -AutoSize
+      register: dns_verify
+      changed_when: false
+    
+    - name: "Display DNS configuration"
+      debug:
+        msg: "{{ dns_verify.stdout_lines }}"
+    
+    - name: "Test DNS resolution"
+      win_shell: |
+        Write-Output "=== Testing DNS Resolution ==="
+        Write-Output ""
+        Write-Output "Test 1: Resolve domain name"
+        try {
+          $result = Resolve-DnsName -Name "{{ domain_name }}" -ErrorAction Stop
+          Write-Output "✅ {{ domain_name }} -> $($result.IPAddress)"
+        } catch {
+          Write-Output "❌ Failed to resolve {{ domain_name }}"
+        }
+        
+        Write-Output ""
+        Write-Output "Test 2: Reverse lookup"
+        try {
+          $result = Resolve-DnsName -Name "{{ dc_ip }}" -Type PTR -ErrorAction Stop
+          Write-Output "✅ {{ dc_ip }} -> $($result.NameHost)"
+        } catch {
+          Write-Output "❌ Failed reverse lookup for {{ dc_ip }}"
+        }
+        
+        Write-Output ""
+        Write-Output "Test 3: Resolve www"
+        try {
+          $result = Resolve-DnsName -Name "www.{{ domain_name }}" -ErrorAction Stop
+          Write-Output "✅ www.{{ domain_name }} -> $($result.IPAddress)"
+        } catch {
+          Write-Output "❌ Failed to resolve www.{{ domain_name }}"
+        }
+        
+        Write-Output ""
+        Write-Output "Test 4: Check DNS client settings"
+        $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+        $dnsServers = (Get-DnsClientServerAddress -InterfaceAlias $adapter.Name -AddressFamily IPv4).ServerAddresses
+        Write-Output "DNS Servers configured: $($dnsServers -join ', ')"
+      register: dns_tests
+      changed_when: false
+    
+    - name: "Display DNS test results"
+      debug:
+        msg: "{{ dns_tests.stdout_lines }}"
+    
+    - name: "Display final summary"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      DNS Configuration Completed                      ║
+          ╠════════════════════════════════════════════════════════╣
+          ║  Forward Zone: {{ domain_name }} ✅
+          ║  Reverse Zone: {{ reverse_zone }} ✅
+          ║  A Records: Created ✅
+          ║  PTR Records: Created ✅
+          ║  
+          ║  Test from Windows Server:
+          ║    nslookup {{ domain_name }}
+          ║    nslookup {{ dc_ip }}
+          ║    nslookup www.{{ domain_name }}
+          ╚════════════════════════════════════════════════════════╝

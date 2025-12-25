@@ -1,0 +1,55 @@
+---
+# Create Demo Database and Tables
+
+- name: "Create demo database"
+  community.mysql.mysql_db:
+    name: "{{ demo_database_name }}"
+    state: present
+
+- name: "Create demo database user"
+  community.mysql.mysql_user:
+    name: "{{ demo_database_user }}"
+    password: "{{ demo_database_password }}"
+    priv: "{{ demo_database_name }}.*:ALL"
+    host: "%"
+    state: present
+
+- name: "Create demo table - users"
+  community.mysql.mysql_query:
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ demo_database_name }}.users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) NOT NULL,
+        email VARCHAR(100) NOT NULL,
+        server_name VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+
+- name: "Create demo table - visits"
+  community.mysql.mysql_query:
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ demo_database_name }}.visits (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        visitor_ip VARCHAR(45),
+        page_url VARCHAR(255),
+        server_name VARCHAR(50),
+        visit_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+
+- name: "Insert sample data"
+  community.mysql.mysql_query:
+    query: |
+      INSERT INTO {{ demo_database_name }}.users (username, email, server_name) VALUES
+      ('admin', 'admin@example.com', 'Web1-Primary'),
+      ('demo_user', 'demo@example.com', 'Web1-Primary'),
+      ('test_user', 'test@example.com', 'Web1-Primary')
+      ON DUPLICATE KEY UPDATE username=username
+
+- name: "Display demo database info"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Demo database created successfully
+      📊 Database: {{ demo_database_name }}
+      👤 User: {{ demo_database_user }}
+      📋 Tables: users, visits
+      📝 Sample data inserted

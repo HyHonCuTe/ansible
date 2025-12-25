@@ -1,0 +1,98 @@
+---
+# Install and configure Suricata IDS
+
+- name: "Install EPEL repository"
+  ansible.builtin.package:
+    name: epel-release
+    state: present
+
+- name: "Install required packages"
+  ansible.builtin.package:
+    name:
+      - suricata
+      - python3
+      - python3-pip
+      - ethtool
+    state: present
+
+- name: "Check if Suricata is installed"
+  ansible.builtin.command: suricata -V
+  register: suricata_version_check
+  changed_when: false
+  failed_when: false
+
+- name: "Display Suricata version"
+  ansible.builtin.debug:
+    msg: "Suricata version: {{ suricata_version_check.stdout_lines[0] | default('Not installed') }}"
+  when: suricata_version_check.rc == 0
+
+- name: "Create Suricata directories"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ suricata_log_dir }}"
+    - /etc/suricata/rules
+    - /var/lib/suricata/rules
+    - /var/run/suricata
+
+- name: "Configure Suricata main config"
+  ansible.builtin.template:
+    src: suricata.yaml.j2
+    dest: /etc/suricata/suricata.yaml
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes
+  notify: restart suricata
+
+- name: "Update Suricata rules"
+  ansible.builtin.command: suricata-update
+  args:
+    creates: /var/lib/suricata/rules/suricata.rules
+  register: suricata_update_result
+  changed_when: "'rules' in suricata_update_result.stdout"
+  when: suricata_enable_rule_update | bool
+
+- name: "Force rule update if enabled"
+  ansible.builtin.command: suricata-update --force
+  when: 
+    - suricata_enable_rule_update | bool
+    - suricata_update_result is defined
+    - suricata_update_result.skipped | default(false)
+  changed_when: true
+
+- name: "Deploy custom rules"
+  ansible.builtin.copy:
+    src: custom.rules
+    dest: /etc/suricata/rules/custom.rules
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart suricata
+  when: suricata_custom_rules_enabled | bool
+
+- name: "Start and enable Suricata service"
+  ansible.builtin.systemd:
+    name: suricata
+    state: "{{ suricata_service_state }}"
+    enabled: "{{ suricata_service_enabled }}"
+    daemon_reload: yes
+
+- name: "Wait for Suricata to be ready"
+  ansible.builtin.wait_for:
+    path: "{{ suricata_log_dir }}/suricata.log"
+    timeout: 30
+  ignore_errors: yes
+
+- name: "Check Suricata service status"
+  ansible.builtin.systemd:
+    name: suricata
+  register: suricata_status
+
+- name: "Display Suricata status"
+  ansible.builtin.debug:
+    msg: "Suricata service is {{ suricata_status.status.ActiveState }}"

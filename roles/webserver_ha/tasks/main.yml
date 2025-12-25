@@ -1,0 +1,56 @@
+---
+# Web Server Installation and Configuration Tasks
+
+- name: "Install Apache web server"
+  ansible.builtin.package:
+    name: "{{ apache_packages }}"
+    state: present
+
+- name: "Create custom index.html page"
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ document_root }}/index.html"
+    owner: apache
+    group: apache
+    mode: '0644'
+  notify: restart apache
+
+- name: "Create custom health check page"
+  ansible.builtin.copy:
+    content: |
+      OK
+    dest: "{{ document_root }}/health.html"
+    owner: apache
+    group: apache
+    mode: '0644'
+
+- name: "Configure firewall for HTTP/HTTPS"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ firewall_ports }}"
+  when: firewall_enabled | bool
+
+- name: "Start and enable Apache service"
+  ansible.builtin.systemd:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: "Verify Apache is running"
+  ansible.builtin.systemd:
+    name: httpd
+    state: started
+  register: apache_status
+  failed_when: apache_status.status.ActiveState != "active"
+
+- name: "Display web server info"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Web Server configured successfully
+      📍 Server: {{ server_name }}
+      🌐 IP: {{ ansible_host }}
+      📂 Document Root: {{ document_root }}
+      🚪 Port: {{ web_server_port }}

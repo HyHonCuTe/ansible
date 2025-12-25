@@ -1,0 +1,96 @@
+#---------------------------------------------------------------------
+# HAProxy Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Generated: {{ ansible_date_time.iso8601 }}
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# Global settings
+#---------------------------------------------------------------------
+global
+    log         127.0.0.1 local2
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     {{ haproxy_max_connections }}
+    user        haproxy
+    group       haproxy
+    daemon
+    stats socket /var/lib/haproxy/stats
+
+#---------------------------------------------------------------------
+# Common defaults
+#---------------------------------------------------------------------
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         {{ haproxy_timeout_connect }}
+    timeout client          {{ haproxy_timeout_client }}
+    timeout server          {{ haproxy_timeout_server }}
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 {{ haproxy_max_connections }}
+
+#---------------------------------------------------------------------
+# Statistics page
+#---------------------------------------------------------------------
+{% if haproxy_enable_stats %}
+listen stats
+    bind *:{{ haproxy_stats_port }}
+    mode http
+    stats enable
+    stats uri /stats
+    stats realm HAProxy\ Statistics
+    stats auth {{ haproxy_stats_user }}:{{ haproxy_stats_password }}
+    stats refresh 30s
+    stats show-node
+    stats show-legends
+    stats show-desc HAProxy Load Balancer Statistics
+{% endif %}
+
+#---------------------------------------------------------------------
+# Frontend configuration
+#---------------------------------------------------------------------
+frontend http-in
+    bind *:{{ haproxy_listen_port }}
+    mode http
+    default_backend web_servers
+    
+    # Add custom headers
+    http-request set-header X-Forwarded-Proto http
+    http-request add-header X-Forwarded-Host %[req.hdr(Host)]
+    
+    # Log format
+    log-format "%ci:%cp [%tr] %ft %b/%s %TR/%Tw/%Tc/%Tr/%Ta %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r"
+
+#---------------------------------------------------------------------
+# Backend configuration
+#---------------------------------------------------------------------
+backend web_servers
+    mode http
+    balance {{ haproxy_balance_algorithm }}
+    
+    # Health check
+    option httpchk GET /health.html
+    http-check expect status 200
+    
+    # Backend server options
+{% for server in haproxy_backend_servers %}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check inter {{ haproxy_check_interval }} rise {{ haproxy_check_rise }} fall {{ haproxy_check_fall }}
+{% endfor %}
+    
+    # Error handling (commented out - error files not available by default)
+    # errorfile 400 /etc/haproxy/errors/400.http
+    # errorfile 403 /etc/haproxy/errors/403.http
+    # errorfile 408 /etc/haproxy/errors/408.http
+    # errorfile 500 /etc/haproxy/errors/500.http
+    # errorfile 502 /etc/haproxy/errors/502.http
+    # errorfile 503 /etc/haproxy/errors/503.http
+    # errorfile 504 /etc/haproxy/errors/504.http

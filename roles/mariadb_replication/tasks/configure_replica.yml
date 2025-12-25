@@ -1,0 +1,54 @@
+---
+# Configure Replica Server
+
+- name: "Wait for Primary to be ready"
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: "Stop replica if running"
+  community.mysql.mysql_query:
+    query: "STOP SLAVE"
+  ignore_errors: yes
+
+- name: "Reset replica"
+  community.mysql.mysql_query:
+    query: "RESET SLAVE"
+  ignore_errors: yes
+
+- name: "Configure replica to connect to Primary"
+  community.mysql.mysql_query:
+    query: >
+      CHANGE MASTER TO
+      MASTER_HOST='{{ mariadb_primary_host }}',
+      MASTER_USER='{{ mariadb_replication_user }}',
+      MASTER_PASSWORD='{{ mariadb_replication_password }}',
+      MASTER_PORT={{ mariadb_port }},
+      MASTER_LOG_FILE='mysql-bin.000001',
+      MASTER_LOG_POS=4,
+      MASTER_CONNECT_RETRY=10
+
+- name: "Start replica"
+  community.mysql.mysql_query:
+    query: "START SLAVE"
+
+- name: "Wait for replica to start"
+  ansible.builtin.pause:
+    seconds: 3
+
+- name: "Check replica status"
+  community.mysql.mysql_query:
+    query: "SHOW SLAVE STATUS"
+  register: replica_status
+
+- name: "Display Replica status"
+  ansible.builtin.debug:
+    msg: |
+      ✅ Replica server configured
+      🔗 Master Host: {{ mariadb_primary_host }}
+      📡 Slave IO Running: {{ replica_status.query_result[0][0].Slave_IO_Running }}
+      ⚙️  Slave SQL Running: {{ replica_status.query_result[0][0].Slave_SQL_Running }}
+      {% if replica_status.query_result[0][0].Slave_IO_Running == 'Yes' and replica_status.query_result[0][0].Slave_SQL_Running == 'Yes' %}
+      ✅ Replication is running successfully!
+      {% else %}
+      ⚠️  Replication may have issues. Check logs.
+      {% endif %}

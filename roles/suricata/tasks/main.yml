@@ -1,3 +1,21 @@
 ---
-- import_tasks: install_suricata.yml
+- name: "Include installation tasks"
+  ansible.builtin.include_tasks: install.yml
+  tags:
+    - install
+    - suricata-install
+
+- name: "Include network configuration tasks"
+  ansible.builtin.include_tasks: configure_network.yml
+  tags:
+    - configure
+    - network
+
+- name: "Include web UI tasks"
+  ansible.builtin.include_tasks: deploy_webui.yml
+  when: suricata_web_ui_enabled | bool
+  tags:
+    - webui
+    - deploy-webui
+
 

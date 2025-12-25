@@ -1,0 +1,55 @@
+# Suricata Custom Rules for Demo
+# Port Scanning Detection
+alert tcp any any -> $HOME_NET any (msg:"DEMO: Possible Port Scan Detected"; flags:S; threshold: type threshold, track by_src, count 10, seconds 60; classtype:attempted-recon; sid:1000001; rev:1;)
+
+# HTTP Suspicious Activity
+alert http any any -> $HOME_NET any (msg:"DEMO: Suspicious HTTP User-Agent"; content:"User-Agent|3a|"; http_header; content:"sqlmap"; nocase; http_header; classtype:web-application-attack; sid:1000002; rev:1;)
+
+# SQL Injection Attempt
+alert http any any -> $HOME_NET any (msg:"DEMO: SQL Injection Attempt - UNION SELECT"; content:"union"; nocase; http_uri; content:"select"; nocase; distance:0; http_uri; classtype:web-application-attack; sid:1000003; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"DEMO: SQL Injection Attempt - OR 1=1"; content:"or"; nocase; http_uri; content:"1=1"; nocase; distance:0; http_uri; classtype:web-application-attack; sid:1000004; rev:1;)
+
+# SSH Brute Force
+alert tcp any any -> $HOME_NET 22 (msg:"DEMO: SSH Brute Force Attempt"; flow:to_server,established; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:1000005; rev:1;)
+
+# ICMP Ping Sweep
+alert icmp any any -> $HOME_NET any (msg:"DEMO: ICMP Ping Sweep"; itype:8; threshold: type threshold, track by_src, count 10, seconds 5; classtype:attempted-recon; sid:1000006; rev:1;)
+
+# Suspicious DNS Query
+alert dns any any -> any any (msg:"DEMO: Suspicious DNS Query - Malware Domain"; content:"|01 00 00 01|"; offset:2; depth:4; content:"malware"; nocase; distance:0; classtype:trojan-activity; sid:1000007; rev:1;)
+
+# Directory Traversal
+alert http any any -> $HOME_NET any (msg:"DEMO: Directory Traversal Attempt"; content:"..%2f"; nocase; http_uri; classtype:web-application-attack; sid:1000008; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"DEMO: Directory Traversal Attempt - Encoded"; content:"..%252f"; nocase; http_uri; classtype:web-application-attack; sid:1000009; rev:1;)
+
+# XSS Attempt
+alert http any any -> $HOME_NET any (msg:"DEMO: XSS Attempt Detected"; content:"<script"; nocase; http_uri; classtype:web-application-attack; sid:1000010; rev:1;)
+
+# Command Injection
+alert http any any -> $HOME_NET any (msg:"DEMO: Command Injection Attempt"; content:"|3b|"; http_uri; pcre:"/\\x3b(cat|ls|wget|curl)/i"; classtype:web-application-attack; sid:1000011; rev:1;)
+
+# File Upload Attempt
+alert http any any -> $HOME_NET any (msg:"DEMO: Suspicious File Upload - PHP"; content:"Content-Type|3a|"; http_header; content:"multipart/form-data"; http_header; content:".php"; http_client_body; classtype:web-application-attack; sid:1000012; rev:1;)
+
+# Password Attack
+alert http any any -> $HOME_NET any (msg:"DEMO: Possible Password Brute Force"; content:"POST"; http_method; content:"password"; nocase; http_client_body; threshold: type threshold, track by_src, count 10, seconds 30; classtype:attempted-admin; sid:1000013; rev:1;)
+
+# Nmap Scan Detection
+alert tcp any any -> $HOME_NET any (msg:"DEMO: Nmap NULL Scan"; flags:0; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:1000014; rev:1;)
+
+alert tcp any any -> $HOME_NET any (msg:"DEMO: Nmap XMAS Scan"; flags:FPU; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:1000015; rev:1;)
+
+# Database Access Attempt
+alert tcp any any -> $HOME_NET 3306 (msg:"DEMO: External MySQL Connection Attempt"; flow:to_server,established; content:"|00 00 00|"; depth:3; classtype:attempted-recon; sid:1000016; rev:1;)
+
+# Reverse Shell Detection
+alert tcp $HOME_NET any -> any any (msg:"DEMO: Possible Reverse Shell"; content:"/bin/bash"; flow:to_server,established; classtype:trojan-activity; sid:1000017; rev:1;)
+
+alert tcp $HOME_NET any -> any any (msg:"DEMO: Netcat Reverse Shell"; content:"nc"; flow:to_server,established; content:"-e"; distance:0; classtype:trojan-activity; sid:1000018; rev:1;)
+
+# Suspicious User-Agent Strings
+alert http any any -> $HOME_NET any (msg:"DEMO: Nikto Web Scanner Detected"; content:"User-Agent|3a|"; http_header; content:"Nikto"; nocase; http_header; classtype:web-application-attack; sid:1000019; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"DEMO: Burp Suite Scanner Detected"; content:"User-Agent|3a|"; http_header; content:"Burp"; nocase; http_header; classtype:web-application-attack; sid:1000020; rev:1;)

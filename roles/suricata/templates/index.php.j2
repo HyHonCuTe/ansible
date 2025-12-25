@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suricata IDS - Alert Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>🛡️ Suricata IDS - Security Monitoring Dashboard</h1>
+                <div class="server-info">
+                    <span class="badge badge-primary">Server: {{ ansible_hostname }}</span>
+                    <span class="badge badge-info">IP: {{ ansible_host }}</span>
+                    <span class="badge badge-success" id="status">● ACTIVE</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🚨</div>
+                <div class="stat-content">
+                    <h3 id="total-alerts">0</h3>
+                    <p>Total Alerts</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-content">
+                    <h3 id="high-severity">0</h3>
+                    <p>High Severity</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3 id="medium-severity">0</h3>
+                    <p>Medium Severity</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">ℹ️</div>
+                <div class="stat-content">
+                    <h3 id="low-severity">0</h3>
+                    <p>Low Severity</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <button class="btn btn-primary" onclick="refreshAlerts()">🔄 Refresh</button>
+            <button class="btn btn-success" onclick="clearFilters()">Clear Filters</button>
+            <div class="auto-refresh">
+                <label>
+                    <input type="checkbox" id="auto-refresh" checked> Auto-refresh (5s)
+                </label>
+            </div>
+        </div>
+
+        <div class="filters">
+            <input type="text" id="filter-ip" placeholder="Filter by IP..." class="filter-input">
+            <select id="filter-severity" class="filter-select">
+                <option value="">All Severities</option>
+                <option value="1">High</option>
+                <option value="2">Medium</option>
+                <option value="3">Low</option>
+            </select>
+            <input type="text" id="filter-signature" placeholder="Filter by signature..." class="filter-input">
+        </div>
+
+        <div class="alerts-container">
+            <h2>Recent Alerts</h2>
+            <div id="alerts-table">
+                <div class="loading">Loading alerts...</div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h3>📋 System Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>Interface:</strong> {{ suricata_interface }}
+                </div>
+                <div class="info-item">
+                    <strong>Network:</strong> {{ suricata_home_net }}
+                </div>
+                <div class="info-item">
+                    <strong>Log Path:</strong> {{ suricata_log_dir }}/eve.json
+                </div>
+                <div class="info-item">
+                    <strong>Rules:</strong> Emerging Threats + Custom
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h3>🎯 Demo Instructions</h3>
+            <div class="demo-instructions">
+                <ol>
+                    <li><strong>Port Scan Test:</strong> Run <code>nmap -sS 192.168.1.27</code> from another machine</li>
+                    <li><strong>SQL Injection Test:</strong> Visit <code>http://192.168.1.100/?id=1' OR '1'='1</code></li>
+                    <li><strong>User-Agent Test:</strong> Use curl with suspicious UA: <code>curl -A "sqlmap" http://192.168.1.100</code></li>
+                    <li><strong>Directory Traversal:</strong> Try <code>http://192.168.1.100/../../etc/passwd</code></li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval;
+
+        function refreshAlerts() {
+            fetch('api.php?action=get_alerts&limit=50')
+                .then(response => response.json())
+                .then(data => {
+                    updateStats(data.stats);
+                    displayAlerts(data.alerts);
+                })
+                .catch(error => {
+                    console.error('Error fetching alerts:', error);
+                    document.getElementById('alerts-table').innerHTML = 
+                        '<div class="error">Failed to load alerts. Check if Suricata is running.</div>';
+                });
+        }
+
+        function updateStats(stats) {
+            document.getElementById('total-alerts').textContent = stats.total || 0;
+            document.getElementById('high-severity').textContent = stats.high || 0;
+            document.getElementById('medium-severity').textContent = stats.medium || 0;
+            document.getElementById('low-severity').textContent = stats.low || 0;
+        }
+
+        function displayAlerts(alerts) {
+            const container = document.getElementById('alerts-table');
+            
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '<div class="no-alerts">No alerts found. System is secure! ✅</div>';
+                return;
+            }
+
+            let html = '<table class="alerts-table"><thead><tr>';
+            html += '<th>Time</th><th>Severity</th><th>Signature</th>';
+            html += '<th>Source</th><th>Destination</th><th>Protocol</th></tr></thead><tbody>';
+
+            alerts.forEach(alert => {
+                const severity = getSeverityBadge(alert.severity);
+                const time = new Date(alert.timestamp).toLocaleString('vi-VN');
+                
+                html += `<tr class="alert-row severity-${alert.severity}">`;
+                html += `<td>${time}</td>`;
+                html += `<td>${severity}</td>`;
+                html += `<td><strong>${alert.signature}</strong></td>`;
+                html += `<td>${alert.src_ip}:${alert.src_port}</td>`;
+                html += `<td>${alert.dest_ip}:${alert.dest_port}</td>`;
+                html += `<td>${alert.proto}</td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function getSeverityBadge(severity) {
+            const badges = {
+                '1': '<span class="badge badge-danger">HIGH</span>',
+                '2': '<span class="badge badge-warning">MEDIUM</span>',
+                '3': '<span class="badge badge-info">LOW</span>'
+            };
+            return badges[severity] || '<span class="badge badge-secondary">UNKNOWN</span>';
+        }
+
+        function clearFilters() {
+            document.getElementById('filter-ip').value = '';
+            document.getElementById('filter-severity').value = '';
+            document.getElementById('filter-signature').value = '';
+            refreshAlerts();
+        }
+
+        // Auto-refresh toggle
+        document.getElementById('auto-refresh').addEventListener('change', function() {
+            if (this.checked) {
+                autoRefreshInterval = setInterval(refreshAlerts, 5000);
+            } else {
+                clearInterval(autoRefreshInterval);
+            }
+        });
+
+        // Initial load
+        refreshAlerts();
+        autoRefreshInterval = setInterval(refreshAlerts, 5000);
+    </script>
+</body>
+</html>

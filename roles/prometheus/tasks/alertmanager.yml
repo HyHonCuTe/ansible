@@ -90,7 +90,7 @@
   notify: reload systemd
 
 - name: "Configure firewall for Alertmanager"
-  firewalld:
+  ansible.posix.firewalld:
     port: "9093/tcp"
     permanent: yes
     state: enabled

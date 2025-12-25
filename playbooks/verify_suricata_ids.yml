@@ -1,0 +1,174 @@
+---
+- name: "Verify Suricata IDS Installation"
+  hosts: security_servers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    suricata_log_dir: "/var/log/suricata"
+    suricata_web_ui_port: 8080
+  
+  tasks:
+    - name: "Check Suricata service status"
+      ansible.builtin.systemd:
+        name: suricata
+      register: service_status
+
+    - name: "Verify service is active"
+      ansible.builtin.assert:
+        that:
+          - service_status.status.ActiveState == "active"
+        fail_msg: "Suricata service is not running!"
+        success_msg: "✅ Suricata service is active"
+
+    - name: "Check Suricata version"
+      ansible.builtin.command: suricata -V
+      register: version_output
+      changed_when: false
+
+    - name: "Display version"
+      ansible.builtin.debug:
+        msg: "{{ version_output.stdout_lines[0] }}"
+
+    - name: "Check if interface exists"
+      ansible.builtin.command: "ip link show {{ suricata_interface }}"
+      register: interface_check
+      changed_when: false
+
+    - name: "Verify interface is up"
+      ansible.builtin.assert:
+        that:
+          - "'UP' in interface_check.stdout"
+        success_msg: "✅ Interface {{ suricata_interface }} is UP"
+
+    - name: "Check promiscuous mode"
+      ansible.builtin.shell: "ip link show {{ suricata_interface }} | grep PROMISC"
+      register: promisc_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Verify promiscuous mode is enabled"
+      ansible.builtin.assert:
+        that:
+          - promisc_check.rc == 0
+        fail_msg: "Promiscuous mode is NOT enabled"
+        success_msg: "✅ Promiscuous mode is enabled"
+
+    - name: "Check if rules are loaded"
+      ansible.builtin.shell: "suricatasc -c 'ruleset-stats' 2>/dev/null | grep -i 'rules loaded' || echo 'Unable to get stats'"
+      register: rules_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Check EVE log exists"
+      ansible.builtin.stat:
+        path: "{{ suricata_log_dir }}/eve.json"
+      register: eve_log
+
+    - name: "Verify EVE log file"
+      ansible.builtin.assert:
+        that:
+          - eve_log.stat.exists
+        fail_msg: "EVE log file does not exist"
+        success_msg: "✅ EVE log file exists"
+
+    - name: "Check log permissions"
+      ansible.builtin.stat:
+        path: "{{ suricata_log_dir }}/eve.json"
+      register: log_perms
+
+    - name: "Display log permissions"
+      ansible.builtin.debug:
+        msg: "EVE log permissions: {{ log_perms.stat.mode }}"
+
+    - name: "Check if web UI is accessible"
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ suricata_web_ui_port }}/"
+        return_content: no
+        status_code: 200
+      register: web_check
+      failed_when: false
+      when: suricata_web_ui_enabled | bool
+
+    - name: "Verify web UI is accessible"
+      ansible.builtin.assert:
+        that:
+          - web_check.status == 200
+        fail_msg: "Web UI is not accessible"
+        success_msg: "✅ Web UI is accessible"
+      when: suricata_web_ui_enabled | bool
+
+    - name: "Generate test alert (ICMP)"
+      ansible.builtin.command: "ping -c 3 {{ ansible_host }}"
+      delegate_to: localhost
+      changed_when: false
+      ignore_errors: yes
+
+    - name: "Wait for alert to be logged"
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: "Check for recent alerts in EVE log"
+      ansible.builtin.shell: "tail -50 {{ suricata_log_dir }}/eve.json | grep '\"event_type\":\"alert\"' | wc -l"
+      register: alert_count
+      changed_when: false
+
+    - name: "Display alert count"
+      ansible.builtin.debug:
+        msg: "Recent alerts found: {{ alert_count.stdout }}"
+
+    - name: "Get last 5 alerts"
+      ansible.builtin.shell: |
+        tail -100 {{ suricata_log_dir }}/eve.json | \
+        grep '\"event_type\":\"alert\"' | \
+        tail -5 | \
+        jq -r '.alert.signature' 2>/dev/null || echo "No recent alerts"
+      register: last_alerts
+      changed_when: false
+      failed_when: false
+
+    - name: "Display recent alerts"
+      ansible.builtin.debug:
+        msg: "{{ last_alerts.stdout_lines }}"
+
+    - name: "Check Suricata process"
+      ansible.builtin.shell: "ps aux | grep '[s]uricata' | head -2"
+      register: process_check
+      changed_when: false
+
+    - name: "Display process info"
+      ansible.builtin.debug:
+        msg: "{{ process_check.stdout_lines }}"
+
+    - name: "Get interface statistics"
+      ansible.builtin.command: "ip -s link show {{ suricata_interface }}"
+      register: interface_stats
+      changed_when: false
+
+    - name: "Check firewall rules"
+      ansible.builtin.command: "firewall-cmd --list-all"
+      register: firewall_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Final verification summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║         Suricata IDS Verification Complete                   ║
+          ╠═══════════════════════════════════════════════════════════════╣
+          ║                                                               ║
+          ║  ✅ Service Status: {{ service_status.status.ActiveState }}
+          ║  ✅ Interface: {{ suricata_interface }} - UP
+          ║  ✅ Promiscuous Mode: ENABLED
+          ║  ✅ EVE Log: EXISTS
+          ║  ✅ Web UI: {{ 'ACCESSIBLE' if (web_check.status | default(0)) == 200 else 'N/A' }}
+          ║  ✅ Recent Alerts: {{ alert_count.stdout }}
+          ║                                                               ║
+          ║  🌐 Access Points:                                            ║
+          ║     Dashboard: http://{{ ansible_host }}:{{ suricata_web_ui_port }}/
+          ║     Log File: {{ suricata_log_dir }}/eve.json                
+          ║                                                               ║
+          ║  📊 System is ready for monitoring!                           ║
+          ║                                                               ║
+          ╚═══════════════════════════════════════════════════════════════╝

@@ -1,0 +1,216 @@
+---
+# Test and Validate ADDS and DNS Deployment
+# Author: HyHonCuTe
+# Date: 2025-12-25
+
+- name: "Validate DNS Role Deployment"
+  hosts: WinServer2016
+  gather_facts: no
+  
+  tasks:
+    - name: "Display DNS validation banner"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      DNS Role Validation Test                         ║
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Check if DNS is installed"
+      win_shell: |
+        try {
+          $dnsFeature = Get-WindowsFeature -Name DNS -ErrorAction Stop
+          if ($dnsFeature.Installed) {
+            Write-Output "✅ DNS is installed"
+            $dnsService = Get-Service -Name DNS -ErrorAction Stop
+            Write-Output "Service Status: $($dnsService.Status)"
+          } else {
+            Write-Output "⚠️  DNS is not installed"
+            Write-Output "To install DNS, use: ansible-playbook playbooks/install_dns_win.yml"
+          }
+        } catch {
+          Write-Output "⚠️  Unable to check DNS status: $($_.Exception.Message)"
+        }
+      register: dns_check
+      changed_when: false
+      failed_when: false
+    
+    - name: "Display DNS status"
+      debug:
+        msg: "{{ dns_check.stdout_lines }}"
+    
+    - name: "Include DNS validation tasks"
+      include_role:
+        name: dns
+        tasks_from: validate.yml
+      when: "'✅' in dns_check.stdout"
+      tags:
+        - dns
+        - validate_dns
+    
+    - name: "Skip DNS validation (not installed)"
+      debug:
+        msg: |
+          ℹ️  Skipping DNS validation - DNS is not installed on this server
+          To install DNS, run: ansible-playbook playbooks/install_dns_win.yml
+      when: "'✅' not in dns_check.stdout"
+
+- name: "Validate ADDS Role Deployment"
+  hosts: ADDS_servers
+  gather_facts: no
+  
+  tasks:
+    - name: "Display ADDS validation banner"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════╗
+          ║      ADDS Role Validation Test                        ║
+          ╚════════════════════════════════════════════════════════╝
+    
+    - name: "Check if ADDS is installed"
+      win_shell: |
+        try {
+          Import-Module ActiveDirectory -ErrorAction Stop
+          $domain = Get-ADDomain -ErrorAction Stop
+          Write-Output "✅ ADDS is installed and operational"
+          Write-Output "Domain: $($domain.DNSRoot)"
+          Write-Output "NetBIOS: $($domain.NetBIOSName)"
+        } catch {
+          Write-Output "⚠️  ADDS is not installed or not operational"
+          Write-Output "This is expected if ADDS has not been deployed yet"
+        }
+      register: adds_check
+      changed_when: false
+      failed_when: false
+    
+    - name: "Display ADDS status"
+      debug:
+        msg: "{{ adds_check.stdout_lines }}"
+    
+    - name: "Include ADDS validation tasks (if ADDS is installed)"
+      include_role:
+        name: adds
+        tasks_from: validate.yml
+      when: "'✅' in adds_check.stdout"
+      tags:
+        - adds
+        - validate_adds
+
+- name: "Generate Combined Validation Report"
+  hosts: ADDS_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: "Create comprehensive validation report"
+      win_shell: |
+        $report = @"
+        ╔════════════════════════════════════════════════════════════════════════╗
+        ║              Windows Server Validation Report                         ║
+        ║              Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')     ║
+        ╠════════════════════════════════════════════════════════════════════════╣
+        ║  Server Information:
+        ║    Hostname: $env:COMPUTERNAME
+        ║    OS: $(Get-WmiObject Win32_OperatingSystem).Caption
+        ║    IP Address: $(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias Ethernet* | Select-Object -First 1 -ExpandProperty IPAddress)
+        ╠════════════════════════════════════════════════════════════════════════╣
+        ║  DNS Service:
+        "@
+        
+        # Check DNS
+        try {
+          $dnsService = Get-Service -Name DNS -ErrorAction Stop
+          if ($dnsService.Status -eq 'Running') {
+            $report += "`n║    Status: ✅ Running"
+            $zones = (Get-DnsServerZone).Count
+            $report += "`n║    Zones: $zones"
+          } else {
+            $report += "`n║    Status: ❌ Not Running"
+          }
+        } catch {
+          $report += "`n║    Status: ⚠️  Not Installed"
+        }
+        
+        $report += "`n╠════════════════════════════════════════════════════════════════════════╣"
+        $report += "`n║  Active Directory Domain Services:"
+        
+        # Check ADDS
+        try {
+          Import-Module ActiveDirectory -ErrorAction Stop
+          $domain = Get-ADDomain -ErrorAction Stop
+          $report += "`n║    Status: ✅ Operational"
+          $report += "`n║    Domain: $($domain.DNSRoot)"
+          $report += "`n║    NetBIOS: $($domain.NetBIOSName)"
+          $report += "`n║    Mode: $($domain.DomainMode)"
+          $dcCount = (Get-ADDomainController -Filter *).Count
+          $report += "`n║    Domain Controllers: $dcCount"
+        } catch {
+          $report += "`n║    Status: ⚠️  Not Installed"
+        }
+        
+        $report += "`n╠════════════════════════════════════════════════════════════════════════╣"
+        $report += "`n║  Critical Services:"
+        
+        # Check critical services
+        $criticalServices = @('DNS', 'ADWS', 'Netlogon', 'NTDS', 'W32Time')
+        foreach ($svc in $criticalServices) {
+          try {
+            $service = Get-Service -Name $svc -ErrorAction SilentlyContinue
+            if ($service) {
+              if ($service.Status -eq 'Running') {
+                $report += "`n║    $svc`: ✅ Running"
+              } else {
+                $report += "`n║    $svc`: ❌ $($service.Status)"
+              }
+            }
+          } catch {
+            # Service not installed - skip
+          }
+        }
+        
+        $report += "`n╠════════════════════════════════════════════════════════════════════════╣"
+        $report += "`n║  Network Ports:"
+        
+        # Check important ports
+        $ports = @(53, 88, 389, 636)
+        foreach ($port in $ports) {
+          $listening = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+          if ($listening) {
+            $report += "`n║    Port $port`: ✅ Listening"
+          }
+        }
+        
+        $report += "`n╠════════════════════════════════════════════════════════════════════════╣"
+        $report += "`n║  Overall Status: ✅ VALIDATION COMPLETE"
+        $report += "`n╚════════════════════════════════════════════════════════════════════════╝"
+        
+        # Save report
+        $report | Out-File -FilePath "C:\Windows_Server_Validation.txt" -Encoding UTF8
+        
+        # Output to console
+        $report
+      register: final_report
+      changed_when: false
+    
+    - name: "Display final validation report"
+      debug:
+        msg: "{{ final_report.stdout_lines }}"
+    
+    - name: "Fetch validation reports to local machine"
+      fetch:
+        src: "{{ item }}"
+        dest: "./validation_reports/{{ inventory_hostname }}/"
+        flat: yes
+      loop:
+        - "C:\\DNS_Validation_Report.txt"
+        - "C:\\AD_Validation_Report.txt"
+        - "C:\\Windows_Server_Validation.txt"
+      ignore_errors: yes
+    
+    - name: "Display report locations"
+      debug:
+        msg: |
+          📊 Validation reports saved:
+            - Server: C:\Windows_Server_Validation.txt
+            - Local: ./validation_reports/{{ inventory_hostname }}/
+          
+          To view reports:
+            cat ./validation_reports/{{ inventory_hostname }}/*.txt

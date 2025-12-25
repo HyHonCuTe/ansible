@@ -1,0 +1,75 @@
+---
+# ADDS Installation Tasks
+# Install Active Directory Domain Services features
+
+- name: "Check if AD DS is already installed"
+  win_shell: |
+    Get-WindowsFeature -Name AD-Domain-Services | Select-Object -ExpandProperty Installed
+  register: adds_check
+  changed_when: false
+  failed_when: false
+
+- name: "Display current AD DS status"
+  debug:
+    msg: "AD DS Feature installed: {{ adds_check.stdout.strip() }}"
+
+- name: "Install AD DS and management tools"
+  win_feature:
+    name: "{{ item }}"
+    state: present
+    include_management_tools: yes
+  loop: "{{ adds_required_features }}"
+  register: adds_feature_install
+  when: adds_check.stdout.strip() == "False"
+
+- name: "Display feature installation results"
+  debug:
+    msg: |
+      {% if adds_feature_install.changed %}
+      ✅ AD DS features installed successfully
+      Installed features: {{ adds_required_features | join(', ') }}
+      {% else %}
+      ℹ️  AD DS features already installed
+      {% endif %}
+
+- name: "Check if reboot is required after feature installation"
+  win_shell: |
+    if (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -Name PendingFileRenameOperations -ErrorAction SilentlyContinue) {
+      Write-Output "True"
+    } else {
+      Write-Output "False"
+    }
+  register: reboot_required
+  changed_when: false
+
+- name: "Reboot server if required (before promoting to DC)"
+  win_reboot:
+    reboot_timeout: 600
+    post_reboot_delay: 60
+  when:
+    - reboot_required.stdout.strip() == "True"
+    - adds_auto_reboot | bool
+
+- name: "Wait for server to come back online"
+  wait_for_connection:
+    timeout: 600
+    delay: 30
+  when:
+    - reboot_required.stdout.strip() == "True"
+    - adds_auto_reboot | bool
+
+- name: "Verify AD DS PowerShell module is available"
+  win_shell: |
+    if (Get-Module -ListAvailable -Name ADDSDeployment) {
+      Write-Output "Available"
+    } else {
+      Write-Output "Not Available"
+    }
+  register: adds_module_check
+  changed_when: false
+  failed_when: adds_module_check.stdout.strip() == "Not Available"
+
+- name: "Display AD DS module status"
+  debug:
+    msg: "✅ ADDSDeployment PowerShell module is available"
+  when: adds_module_check.stdout.strip() == "Available"
