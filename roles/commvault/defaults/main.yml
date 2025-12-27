@@ -1,0 +1,59 @@
+---
+# Commvault Backup System Configuration
+
+# Commvault Server Configuration
+commvault_server_ip: "192.168.1.9"
+commvault_server_hostname: "backup-server"
+commvault_install_dir: "/opt/commvault"
+commvault_data_dir: "/backup/commvault"
+commvault_log_dir: "/var/log/commvault"
+
+# Commvault Components
+commvault_install_commserve: yes
+commvault_install_mediaagent: yes
+commvault_install_client: no
+
+# Agent Configuration (for clients)
+commvault_agent_port: 8400
+commvault_firewall_ports:
+  - 8400/tcp  # Agent communication
+  - 8403/tcp  # Web console
+  - 8600/tcp  # CVD service
+  - 8401/tcp  # Client Event Manager
+
+# Database Backup Configuration
+commvault_db_backup_enabled: yes
+commvault_db_type: "mariadb"
+commvault_db_backup_user: "backup_user"
+commvault_db_backup_password: "BackupP@ss123"
+commvault_db_backup_schedule: "0 2 * * *"  # 2 AM daily
+
+# Backup Retention
+commvault_retention_days: 30
+commvault_full_backup_weekly: yes
+commvault_incremental_backup_daily: yes
+
+# Storage Configuration
+commvault_storage_path: "/backup/storage"
+commvault_storage_size_gb: 500
+commvault_deduplication_enabled: yes
+
+# MySQL/MariaDB Backup Settings
+mysql_backup_dir: "/backup/mysql"
+mysql_backup_compress: yes
+mysql_backup_retention_days: 7
+mysql_backup_databases:
+  - "wordpress"
+  - "mysql"
+
+# Alternative: Native backup tools (if Commvault not available)
+use_native_backup: yes  # Fallback to mysqldump/mariabackup
+native_backup_method: "mariabackup"  # or "mysqldump"
+
+# Notification
+commvault_email_alerts: yes
+commvault_email_recipient: "admin@example.com"
+
+# Security
+commvault_ssl_enabled: yes
+commvault_encrypt_backup: yes

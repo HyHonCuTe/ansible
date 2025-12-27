@@ -79,33 +79,25 @@
             </div>
         </div>
 
-        <div class="info-panel">
-            <h3>📋 System Information</h3>
-            <div class="info-grid">
-                <div class="info-item">
-                    <strong>Interface:</strong> {{ suricata_interface }}
-                </div>
-                <div class="info-item">
-                    <strong>Network:</strong> {{ suricata_home_net }}
-                </div>
-                <div class="info-item">
-                    <strong>Log Path:</strong> {{ suricata_log_dir }}/eve.json
-                </div>
-                <div class="info-item">
-                    <strong>Rules:</strong> Emerging Threats + Custom
-                </div>
+        <div class="system-info">
+            <div class="info-section">
+                <h3>📋 System Information</h3>
+                <ul>
+                    <li><strong>Interface:</strong> {{ suricata_interface }}</li>
+                    <li><strong>Network:</strong> {{ suricata_home_net }}</li>
+                    <li><strong>Log Path:</strong> {{ suricata_log_dir }}/eve.json</li>
+                    <li><strong>Rules:</strong> Emerging Threats + Custom</li>
+                </ul>
             </div>
-        </div>
-
-        <div class="demo-section">
-            <h3>🎯 Demo Instructions</h3>
-            <div class="demo-instructions">
-                <ol>
-                    <li><strong>Port Scan Test:</strong> Run <code>nmap -sS 192.168.1.27</code> from another machine</li>
-                    <li><strong>SQL Injection Test:</strong> Visit <code>http://192.168.1.100/?id=1' OR '1'='1</code></li>
-                    <li><strong>User-Agent Test:</strong> Use curl with suspicious UA: <code>curl -A "sqlmap" http://192.168.1.100</code></li>
-                    <li><strong>Directory Traversal:</strong> Try <code>http://192.168.1.100/../../etc/passwd</code></li>
-                </ol>
+            
+            <div class="info-section">
+                <h3>🎯 Demo Instructions</h3>
+                <ul>
+                    <li><strong>Port Scan:</strong> <code>nmap -sS 192.168.1.27</code></li>
+                    <li><strong>SQL Injection:</strong> <code>?id=1' OR '1'='1</code></li>
+                    <li><strong>User-Agent:</strong> <code>curl -A "sqlmap" http://192.168.1.100</code></li>
+                    <li><strong>Path Traversal:</strong> <code>/../../etc/passwd</code></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -114,7 +106,7 @@
         let autoRefreshInterval;
 
         function refreshAlerts() {
-            fetch('api.php?action=get_alerts&limit=50')
+            fetch('api.php?action=get_alerts&limit=500')
                 .then(response => response.json())
                 .then(data => {
                     updateStats(data.stats);
@@ -142,7 +134,7 @@
                 return;
             }
 
-            let html = '<table class="alerts-table"><thead><tr>';
+            let html = '<div class="table-scroll"><table class="alerts-table"><thead><tr>';
             html += '<th>Time</th><th>Severity</th><th>Signature</th>';
             html += '<th>Source</th><th>Destination</th><th>Protocol</th></tr></thead><tbody>';
 
@@ -160,7 +152,7 @@
                 html += '</tr>';
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             container.innerHTML = html;
         }
 

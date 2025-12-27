@@ -46,3 +46,13 @@ suricata_firewall_zones:
 suricata_web_ui_enabled: yes
 suricata_web_ui_port: 8080
 suricata_web_ui_path: "/var/www/html/suricata-ui"
+
+# IPS (Intrusion Prevention System) Configuration
+suricata_ips_enabled: no                    # Enable IPS mode (inline blocking)
+suricata_ips_use_nfqueue: yes               # Use NFQueue for inline mode
+suricata_ips_interface: "{{ suricata_interface }}"  # Interface for IPS
+suricata_ips_drop_mode: yes                 # Convert alert rules to drop rules
+suricata_ips_queue_numbers:
+  - 0  # Incoming traffic queue
+  - 1  # Outgoing traffic queue
+

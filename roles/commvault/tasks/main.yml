@@ -1,0 +1,34 @@
+---
+# Main task file for Commvault Backup System
+
+- name: "Include server installation tasks"
+  ansible.builtin.include_tasks: install_server.yml
+  when: 
+    - commvault_install_commserve | bool
+    - inventory_hostname in groups['backup_server'] | default([])
+  tags:
+    - commvault-server
+    - install
+
+- name: "Include agent installation tasks"
+  ansible.builtin.include_tasks: install_agent.yml
+  when:
+    - commvault_install_client | bool
+    - inventory_hostname not in groups['backup_server'] | default([])
+  tags:
+    - commvault-agent
+    - install
+
+- name: "Include database backup tasks"
+  ansible.builtin.include_tasks: backup_database.yml
+  when: commvault_db_backup_enabled | bool
+  tags:
+    - database-backup
+    - backup
+
+- name: "Include native backup tasks (fallback)"
+  ansible.builtin.include_tasks: native_backup.yml
+  when: use_native_backup | bool
+  tags:
+    - native-backup
+    - backup

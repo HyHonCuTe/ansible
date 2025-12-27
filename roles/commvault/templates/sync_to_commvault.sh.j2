@@ -1,0 +1,27 @@
+#!/bin/bash
+# Sync backups to Commvault Server
+
+BACKUP_PATH="$1"
+COMMVAULT_SERVER="{{ commvault_server_ip }}"
+REMOTE_PATH="{{ commvault_storage_path }}/{{ ansible_hostname }}"
+
+if [ -z "$BACKUP_PATH" ]; then
+    echo "Usage: $0 <backup_path>"
+    exit 1
+fi
+
+# Create remote directory
+ssh root@${COMMVAULT_SERVER} "mkdir -p ${REMOTE_PATH}" 2>/dev/null || {
+    echo "Cannot connect to Commvault Server. Skipping sync."
+    exit 0
+}
+
+# Sync backup files
+echo "Syncing to Commvault Server: ${COMMVAULT_SERVER}:${REMOTE_PATH}"
+rsync -avz --progress "${BACKUP_PATH}"* root@${COMMVAULT_SERVER}:${REMOTE_PATH}/
+
+if [ $? -eq 0 ]; then
+    echo "Backup synced successfully to Commvault Server"
+else
+    echo "Warning: Backup sync failed. Backup remains on local storage only."
+fi

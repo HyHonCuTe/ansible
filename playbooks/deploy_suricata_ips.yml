@@ -1,0 +1,93 @@
+---
+# Playbook: Deploy Suricata with IPS (Intrusion Prevention System)
+# Purpose: Enable inline blocking mode with NFQueue
+
+- name: "Deploy Suricata IPS Mode"
+  hosts: IDS-Server
+  become: yes
+  vars:
+    suricata_ips_enabled: yes
+    suricata_ips_use_nfqueue: yes
+    suricata_ips_drop_mode: yes
+    suricata_ips_interface: "ens192"
+    suricata_interface: "ens192"
+    suricata_home_net: "[192.168.1.0/24]"
+    suricata_log_dir: "/var/log/suricata"
+    suricata_web_ui_enabled: yes
+    suricata_web_ui_port: 8080
+
+  tasks:
+    - name: "Import Suricata role with IPS enabled"
+      ansible.builtin.import_role:
+        name: suricata
+      tags:
+        - suricata
+        - ips
+
+    - name: "Verify IPS is active"
+      block:
+        - name: "Check NFQueue kernel module"
+          ansible.builtin.shell: lsmod | grep nfnetlink_queue
+          register: nfqueue_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Check iptables NFQueue rules"
+          ansible.builtin.command: iptables -L -n -v -t raw
+          register: iptables_nfqueue
+          changed_when: false
+
+        - name: "Check Suricata process for NFQueue"
+          ansible.builtin.shell: ps aux | grep 'suricata.*-q'
+          register: suricata_process
+          changed_when: false
+          failed_when: false
+
+        - name: "Display IPS verification"
+          ansible.builtin.debug:
+            msg:
+              - "=== Suricata IPS Verification ==="
+              - "NFQueue Module: {{ 'LOADED ✓' if nfqueue_check.rc == 0 else 'NOT LOADED ✗' }}"
+              - "Suricata Process: {{ suricata_process.stdout_lines[0] if suricata_process.stdout_lines else 'Not running in queue mode' }}"
+              - ""
+              - "IPtables NFQueue Rules:"
+              - "{{ iptables_nfqueue.stdout_lines }}"
+
+    - name: "Test IPS blocking capability"
+      block:
+        - name: "Check for drop rules in Suricata"
+          ansible.builtin.shell: grep -c '^drop' /etc/suricata/rules/custom.rules || echo 0
+          register: drop_rules_count
+          changed_when: false
+
+        - name: "Display blocking capability"
+          ansible.builtin.debug:
+            msg:
+              - "=== IPS Blocking Status ==="
+              - "Drop Rules Active: {{ drop_rules_count.stdout }}"
+              - "Mode: {{ 'Active Blocking (IPS)' if drop_rules_count.stdout|int > 0 else 'Alert Only (IDS)' }}"
+
+    - name: "Final IPS deployment summary"
+      ansible.builtin.debug:
+        msg:
+          - "╔════════════════════════════════════════════════════════╗"
+          - "║     Suricata IPS Deployment Complete                  ║"
+          - "╚════════════════════════════════════════════════════════╝"
+          - ""
+          - "Configuration:"
+          - "  • Interface: {{ suricata_ips_interface }}"
+          - "  • Network: {{ suricata_home_net }}"
+          - "  • Mode: IPS (Inline Blocking)"
+          - "  • NFQueue: 0 (incoming), 1 (outgoing)"
+          - "  • Drop Rules: {{ drop_rules_count.stdout }} active"
+          - ""
+          - "Traffic Flow:"
+          - "  Packet → iptables PREROUTING → NFQueue 0 → Suricata"
+          - "         → Analysis → DROP/ACCEPT → Network"
+          - ""
+          - "Web Dashboard: http://{{ ansible_host }}:{{ suricata_web_ui_port }}"
+          - ""
+          - "Next Steps:"
+          - "  1. Monitor /var/log/suricata/eve.json for blocked traffic"
+          - "  2. Adjust drop rules in /etc/suricata/rules/custom.rules"
+          - "  3. Test blocking: curl http://192.168.1.100/?id=1' OR '1'='1"

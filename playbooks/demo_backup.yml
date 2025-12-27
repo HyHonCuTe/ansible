@@ -1,0 +1,39 @@
+---
+# Quick Demo: Commvault Backup System
+
+- name: "Quick Backup Demo for Web Servers"
+  hosts: web_servers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    use_native_backup: yes
+    commvault_db_backup_enabled: yes
+    mysql_backup_databases:
+      - wordpress
+      - mysql
+    mysql_backup_dir: /backup/mysql
+    commvault_server_ip: 192.168.1.9
+
+  tasks:
+    - name: "Deploy native backup (no Commvault needed)"
+      ansible.builtin.import_role:
+        name: commvault
+      tags:
+        - backup
+
+    - name: "Run test backup"
+      ansible.builtin.shell: /usr/local/bin/mariadb_backup.sh test
+      register: test_result
+      changed_when: false
+      ignore_errors: yes
+
+    - name: "Show results"
+      ansible.builtin.debug:
+        msg: |
+          Backup test: {{ 'SUCCESS ✓' if test_result.rc == 0 else 'FAILED ✗' }}
+          
+          Commands available:
+          - Full backup: /usr/local/bin/mariadb_backup.sh full
+          - View backups: ls -lh {{ mysql_backup_dir }}/full/
+          - Restore: /usr/local/bin/mariadb_restore.sh <file>

@@ -26,13 +26,21 @@
     msg: "Suricata version: {{ suricata_version_check.stdout_lines[0] | default('Not installed') }}"
   when: suricata_version_check.rc == 0
 
+- name: "Create suricata user and group"
+  ansible.builtin.user:
+    name: suricata
+    system: yes
+    create_home: no
+    shell: /sbin/nologin
+    state: present
+
 - name: "Create Suricata directories"
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: root
-    group: root
-    mode: '0755'
+    group: suricata
+    mode: '0750'
   loop:
     - "{{ suricata_log_dir }}"
     - /etc/suricata/rules
@@ -74,6 +82,31 @@
     mode: '0644'
   notify: restart suricata
   when: suricata_custom_rules_enabled | bool
+
+- name: "Configure /etc/sysconfig/suricata with correct interface"
+  ansible.builtin.template:
+    src: sysconfig_suricata.j2
+    dest: /etc/sysconfig/suricata
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart suricata
+
+- name: "Pre-create log files with correct ownership"
+  ansible.builtin.file:
+    path: "{{ suricata_log_dir }}/{{ item }}"
+    state: touch
+    owner: suricata
+    group: suricata
+    mode: '0640'
+    modification_time: preserve
+    access_time: preserve
+  loop:
+    - eve.json
+    - fast.log
+    - http.log
+    - suricata.log
+    - stats.log
 
 - name: "Start and enable Suricata service"
   ansible.builtin.systemd:

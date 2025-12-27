@@ -1,0 +1,18 @@
+---
+# Handlers for Commvault role
+
+- name: restart commvault
+  ansible.builtin.systemd:
+    name: commvault
+    state: restarted
+  when: commvault_installed.stat.exists | default(false)
+
+- name: restart mariadb
+  ansible.builtin.systemd:
+    name: mariadb
+    state: restarted
+
+- name: reload cron
+  ansible.builtin.systemd:
+    name: crond
+    state: reloaded

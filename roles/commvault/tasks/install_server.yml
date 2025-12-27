@@ -1,0 +1,121 @@
+---
+# Install Commvault Server (CommServe + MediaAgent)
+
+- name: "Prepare Commvault Server"
+  block:
+    - name: "Create Commvault directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ commvault_install_dir }}"
+        - "{{ commvault_data_dir }}"
+        - "{{ commvault_log_dir }}"
+        - "{{ commvault_storage_path }}"
+
+    - name: "Install prerequisites"
+      ansible.builtin.package:
+        name:
+          - java-11-openjdk
+          - wget
+          - tar
+          - unzip
+          - lsof
+          - net-tools
+        state: present
+
+    - name: "Configure firewall for Commvault"
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop: "{{ commvault_firewall_ports }}"
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: "Set hostname for Commvault Server"
+      ansible.builtin.hostname:
+        name: "{{ commvault_server_hostname }}"
+
+    - name: "Add hostname to /etc/hosts"
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ commvault_server_ip }} {{ commvault_server_hostname }}"
+        state: present
+
+    - name: "Check if Commvault is already installed"
+      ansible.builtin.stat:
+        path: "{{ commvault_install_dir }}/Base/cvd"
+      register: commvault_installed
+
+    - name: "Display Commvault installation notice"
+      ansible.builtin.debug:
+        msg: |
+          ================================================================
+          COMMVAULT SERVER INSTALLATION NOTICE
+          ================================================================
+          
+          Commvault is a commercial software requiring:
+          1. Valid license from Commvault
+          2. Installation package from vendor
+          3. Manual installation steps
+          
+          Next steps to complete installation:
+          
+          1. Download Commvault package:
+             - Contact Commvault for trial or licensed version
+             - Or download from: https://www.commvault.com
+          
+          2. Upload installer to: {{ commvault_install_dir }}/
+          
+          3. Run installation:
+             cd {{ commvault_install_dir }}
+             ./cvpkgadd
+          
+          4. Access Web Console:
+             https://{{ commvault_server_ip }}:8403
+          
+          Server is prepared with:
+          - Directories created: {{ commvault_install_dir }}
+          - Storage ready: {{ commvault_storage_path }}
+          - Firewall configured
+          - Prerequisites installed
+          
+          Alternative: Native backup system is configured and ready
+          ================================================================
+      when: not commvault_installed.stat.exists
+
+    - name: "Create Commvault service file (template)"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/commvault.service
+        content: |
+          [Unit]
+          Description=Commvault CommServe Service
+          After=network.target
+
+          [Service]
+          Type=forking
+          ExecStart={{ commvault_install_dir }}/Base/cvd start
+          ExecStop={{ commvault_install_dir }}/Base/cvd stop
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: '0644'
+      when: commvault_installed.stat.exists
+
+    - name: "Enable Commvault service"
+      ansible.builtin.systemd:
+        name: commvault
+        enabled: yes
+        daemon_reload: yes
+      when: commvault_installed.stat.exists
+
+  tags:
+    - commvault-prep

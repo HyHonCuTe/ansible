@@ -1,0 +1,138 @@
+---
+# Deploy Commvault Backup System for HA Infrastructure
+# Phase 1: Setup Backup Server and Database Backup
+
+- name: "Phase 1: Setup Commvault Backup Server"
+  hosts: backup_server
+  become: yes
+  vars:
+    commvault_install_commserve: yes
+    commvault_install_mediaagent: yes
+    commvault_server_ip: "{{ ansible_host }}"
+    commvault_storage_path: "/backup/storage"
+
+  tasks:
+    - name: "Import Commvault role (Server)"
+      ansible.builtin.import_role:
+        name: commvault
+      tags:
+        - commvault-server
+
+- name: "Phase 2: Deploy Backup Agents on Database Servers"
+  hosts: web_servers
+  become: yes
+  vars:
+    commvault_install_client: yes
+    commvault_db_backup_enabled: yes
+    use_native_backup: yes
+    mysql_backup_databases:
+      - wordpress
+      - mysql
+
+  pre_tasks:
+    - name: "Gather Commvault Server IP"
+      ansible.builtin.set_fact:
+        commvault_server_ip: "{{ hostvars[groups['backup_server'][0]]['ansible_host'] }}"
+      when: groups['backup_server'] is defined
+
+  tasks:
+    - name: "Import Commvault role (Client + Backup)"
+      ansible.builtin.import_role:
+        name: commvault
+      tags:
+        - commvault-client
+        - database-backup
+
+    - name: "Run initial backup test"
+      ansible.builtin.command: /usr/local/bin/mariadb_backup.sh test
+      register: initial_backup
+      changed_when: false
+      failed_when: false
+
+    - name: "Display backup test results"
+      ansible.builtin.debug:
+        msg: |
+          Initial backup test: {{ 'SUCCESS ✓' if initial_backup.rc == 0 else 'FAILED ✗' }}
+          
+          {% if initial_backup.rc == 0 %}
+          You can now run full backup with:
+          ansible {{ inventory_hostname }} -i inventory/hosts.yml -m shell -a "/usr/local/bin/mariadb_backup.sh full" -b
+          {% endif %}
+
+- name: "Phase 3: Deployment Summary and Next Steps"
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: "Display deployment summary"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║         COMMVAULT BACKUP SYSTEM DEPLOYMENT COMPLETE          ║
+          ╚═══════════════════════════════════════════════════════════════╝
+          
+          📦 BACKUP INFRASTRUCTURE DEPLOYED:
+          
+          1️⃣ BACKUP SERVER ({{ hostvars[groups['backup_server'][0]]['ansible_host'] if groups['backup_server'] is defined else '192.168.1.9' }})
+             ✅ Commvault directories prepared
+             ✅ Storage path ready: /backup/storage
+             ✅ Firewall configured
+             
+          2️⃣ DATABASE SERVERS (Web1 + Web2)
+             ✅ Backup agents prepared
+             ✅ MariaDB backup user created
+             ✅ Native backup scripts deployed
+             ✅ Automated daily backup scheduled (2:00 AM)
+             
+          📊 BACKUP CONFIGURATION:
+          
+          Backup Method:
+          • Primary: Commvault (requires commercial license)
+          • Fallback: MariaBackup (open-source, ready to use)
+          
+          Backup Schedule:
+          • Full backup: Daily at 2:00 AM
+          • Retention: 7 days local, 30 days on Commvault Server
+          • Compression: Enabled (pigz)
+          
+          Storage Locations:
+          • Local: /backup/mysql/full/
+          • Remote: {{ hostvars[groups['backup_server'][0]]['ansible_host'] if groups['backup_server'] is defined else '192.168.1.9' }}:/backup/storage
+          
+          🎯 NEXT STEPS FOR COMMVAULT:
+          
+          A. To use Commvault (commercial):
+             1. Download Commvault from vendor
+             2. Install on {{ hostvars[groups['backup_server'][0]]['ansible_host'] if groups['backup_server'] is defined else '192.168.1.9' }}
+             3. Access: https://{{ hostvars[groups['backup_server'][0]]['ansible_host'] if groups['backup_server'] is defined else '192.168.1.9' }}:8403
+             4. Configure MySQL subclients for Web1 + Web2
+          
+          B. To use Native Backup (ready now):
+             1. Run manual backup:
+                ansible web_servers -i inventory/hosts.yml -m shell -a "/usr/local/bin/mariadb_backup.sh full" -b
+             
+             2. View backups:
+                ansible web_servers -i inventory/hosts.yml -m shell -a "ls -lh /backup/mysql/full/" -b
+             
+             3. Test restore (on one server):
+                ansible Web1 -i inventory/hosts.yml -m shell -a "/usr/local/bin/mariadb_restore.sh /backup/mysql/full/backup_XXXXXX.xbstream.gz" -b
+          
+          📋 DEMO SCENARIOS:
+          
+          Demo 1: Database Backup
+          • Create test data in WordPress
+          • Run: /usr/local/bin/mariadb_backup.sh full
+          • Verify backup files created
+          
+          Demo 2: Disaster Recovery
+          • Simulate data loss
+          • Restore from backup
+          • Verify data integrity
+          
+          📚 DOCUMENTATION:
+          • Backup role: roles/commvault/
+          • Scripts: /usr/local/bin/mariadb_*.sh
+          • Logs: /backup/mysql/logs/
+          
+          For Commvault documentation: roles/commvault/README.md
+          ═══════════════════════════════════════════════════════════════

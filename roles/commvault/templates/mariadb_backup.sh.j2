@@ -1,0 +1,99 @@
+#!/bin/bash
+# MariaDB Backup Script using Mariabackup
+# Compatible with Commvault storage
+
+set -e
+
+BACKUP_DIR="{{ mysql_backup_dir }}"
+BACKUP_TYPE="${1:-full}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+MYSQL_USER="{{ commvault_db_backup_user }}"
+MYSQL_PASS="{{ commvault_db_backup_password }}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1" >&2
+    exit 1
+}
+
+# Check if MariaDB is running
+if ! systemctl is-active --quiet mariadb; then
+    error "MariaDB is not running"
+fi
+
+case "$BACKUP_TYPE" in
+    full)
+        log "Starting FULL backup..."
+        BACKUP_PATH="${BACKUP_DIR}/full/backup_${TIMESTAMP}"
+        mkdir -p "$BACKUP_PATH"
+        
+        # Perform backup
+        mariabackup --backup \
+            --user="$MYSQL_USER" \
+            --password="$MYSQL_PASS" \
+            --target-dir="$BACKUP_PATH" \
+            --stream=xbstream {% if mysql_backup_compress %}| pigz > "${BACKUP_PATH}.xbstream.gz"{% else %}> "${BACKUP_PATH}.xbstream"{% endif %}
+        
+        if [ $? -eq 0 ]; then
+            {% if mysql_backup_compress %}
+            BACKUP_SIZE=$(du -sh "${BACKUP_PATH}.xbstream.gz" | cut -f1)
+            {% else %}
+            BACKUP_SIZE=$(du -sh "${BACKUP_PATH}.xbstream" | cut -f1)
+            {% endif %}
+            log "Backup completed successfully"
+            log "Backup size: $BACKUP_SIZE"
+            log "Backup location: $BACKUP_PATH"
+            
+            # Create metadata
+            cat > "${BACKUP_PATH}.metadata" <<EOF
+BACKUP_TYPE=full
+TIMESTAMP=$TIMESTAMP
+HOSTNAME={{ ansible_hostname }}
+MYSQL_VERSION=$(mysql --version)
+BACKUP_SIZE=$BACKUP_SIZE
+DATABASES={{ mysql_backup_databases | join(',') }}
+COMPRESSION={{ 'yes' if mysql_backup_compress else 'no' }}
+EOF
+            
+            # Sync to Commvault server
+            /usr/local/bin/sync_to_commvault.sh "$BACKUP_PATH" &
+            
+        else
+            error "Backup failed"
+        fi
+        ;;
+        
+    test)
+        log "Running test backup (no compression)..."
+        TEST_PATH="${BACKUP_DIR}/test_$(date +%s)"
+        mkdir -p "$TEST_PATH"
+        
+        mariabackup --backup \
+            --user="$MYSQL_USER" \
+            --password="$MYSQL_PASS" \
+            --target-dir="$TEST_PATH" \
+            2>&1 | tee "${BACKUP_DIR}/logs/test_backup.log"
+        
+        if [ $? -eq 0 ]; then
+            log "Test backup successful"
+            rm -rf "$TEST_PATH"
+        else
+            error "Test backup failed"
+        fi
+        ;;
+        
+    *)
+        error "Unknown backup type: $BACKUP_TYPE (use: full|test)"
+        ;;
+esac
+
+log "Backup operation completed"

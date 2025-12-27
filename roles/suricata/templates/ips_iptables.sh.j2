@@ -1,0 +1,36 @@
+#!/bin/bash
+# Suricata IPS iptables Configuration
+# Redirects traffic to NFQueue for inline inspection
+
+# Flush existing rules
+iptables -F -t raw
+iptables -F -t mangle
+
+# Allow localhost
+iptables -t raw -A PREROUTING -i lo -j ACCEPT
+iptables -t raw -A OUTPUT -o lo -j ACCEPT
+
+{% if suricata_ips_interface is defined %}
+# Send incoming traffic on {{ suricata_ips_interface }} to NFQueue 0
+iptables -t raw -A PREROUTING -i {{ suricata_ips_interface }} -j NFQUEUE --queue-num 0 --queue-bypass
+
+# Send outgoing traffic on {{ suricata_ips_interface }} to NFQueue 1
+iptables -t raw -A OUTPUT -o {{ suricata_ips_interface }} -j NFQUEUE --queue-num 1 --queue-bypass
+{% else %}
+# Send all incoming traffic to NFQueue 0
+iptables -t raw -A PREROUTING -j NFQUEUE --queue-num 0 --queue-bypass
+
+# Send all outgoing traffic to NFQueue 1
+iptables -t raw -A OUTPUT -j NFQUEUE --queue-num 1 --queue-bypass
+{% endif %}
+
+# Log configuration
+echo "Suricata IPS iptables rules applied:"
+iptables -L -n -v -t raw
+
+# Save rules
+{% if ansible_os_family == "RedHat" %}
+iptables-save > /etc/sysconfig/iptables
+{% elif ansible_os_family == "Debian" %}
+iptables-save > /etc/iptables/rules.v4
+{% endif %}

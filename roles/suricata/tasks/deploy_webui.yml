@@ -81,6 +81,20 @@
     mode: '0640'
   when: false  # Skip - file created after Suricata starts
 
+- name: "Set SELinux context for Suricata logs (allow Apache to read)"
+  community.general.sefcontext:
+    target: "{{ suricata_log_dir }}(/.*)?"
+    setype: httpd_log_t
+    state: present
+  when: ansible_selinux.status == "enabled"
+  ignore_errors: yes
+
+- name: "Apply SELinux context to existing log files"
+  ansible.builtin.command: "restorecon -Rv {{ suricata_log_dir }}"
+  when: ansible_selinux.status == "enabled"
+  changed_when: false
+  ignore_errors: yes
+
 - name: "Configure httpd for Suricata UI"
   ansible.builtin.template:
     src: suricata-ui.conf.j2

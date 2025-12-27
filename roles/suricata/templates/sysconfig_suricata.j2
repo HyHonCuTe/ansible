@@ -1,0 +1,12 @@
+# Suricata configuration for systemd service
+# Managed by Ansible - Do not edit manually
+# Generated: {{ ansible_date_time.iso8601 }}
+
+# The following parameters are the most commonly needed to configure
+# suricata. A full list can be seen by running /sbin/suricata --help
+# -i <network interface device>
+# --user <acct name>
+# --group <group name>
+
+# Add options to be passed to the daemon
+OPTIONS="-i {{ suricata_interface }} --user suricata "

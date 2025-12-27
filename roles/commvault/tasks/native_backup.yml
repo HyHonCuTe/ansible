@@ -1,0 +1,144 @@
+---
+# Native backup implementation (works without Commvault)
+
+- name: "Setup native MariaDB backup system"
+  block:
+    - name: "Install backup tools"
+      ansible.builtin.package:
+        name:
+          - mariadb-backup
+          - pigz  # parallel gzip
+        state: present
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: "Create backup directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: mysql
+        group: mysql
+        mode: '0750'
+      loop:
+        - "{{ mysql_backup_dir }}"
+        - "{{ mysql_backup_dir }}/full"
+        - "{{ mysql_backup_dir }}/incremental"
+        - "{{ mysql_backup_dir }}/logs"
+
+    - name: "Deploy backup script"
+      ansible.builtin.template:
+        src: mariadb_backup.sh.j2
+        dest: /usr/local/bin/mariadb_backup.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "Deploy restore script"
+      ansible.builtin.template:
+        src: mariadb_restore.sh.j2
+        dest: /usr/local/bin/mariadb_restore.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "Create backup cron job"
+      ansible.builtin.cron:
+        name: "MariaDB Daily Backup"
+        minute: "0"
+        hour: "2"
+        job: "/usr/local/bin/mariadb_backup.sh full > {{ mysql_backup_dir }}/logs/backup-$(date +\\%Y\\%m\\%d).log 2>&1"
+        user: root
+        state: present
+
+    - name: "Create backup cleanup cron"
+      ansible.builtin.cron:
+        name: "Cleanup old backups"
+        minute: "30"
+        hour: "3"
+        job: "find {{ mysql_backup_dir }}/full -name '*.xbstream.gz' -mtime +{{ mysql_backup_retention_days }} -delete"
+        user: root
+        state: present
+
+    - name: "Create backup sync to Commvault server"
+      ansible.builtin.template:
+        src: sync_to_commvault.sh.j2
+        dest: /usr/local/bin/sync_to_commvault.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "Setup SSH key for backup sync"
+      block:
+        - name: "Check if SSH key exists"
+          ansible.builtin.stat:
+            path: /root/.ssh/id_rsa
+          register: ssh_key
+
+        - name: "Generate SSH key for root"
+          ansible.builtin.command: ssh-keygen -t rsa -b 4096 -N "" -f /root/.ssh/id_rsa
+          when: not ssh_key.stat.exists
+
+        - name: "Display SSH public key"
+          ansible.builtin.shell: cat /root/.ssh/id_rsa.pub
+          register: ssh_pubkey
+          changed_when: false
+
+        - name: "SSH key setup notice"
+          ansible.builtin.debug:
+            msg: |
+              ================================================================
+              BACKUP SYNC SETUP
+              ================================================================
+              
+              Copy this SSH public key to Commvault Server ({{ commvault_server_ip }}):
+              
+              {{ ssh_pubkey.stdout }}
+              
+              On Commvault Server, run:
+              mkdir -p /root/.ssh
+              echo "{{ ssh_pubkey.stdout }}" >> /root/.ssh/authorized_keys
+              chmod 600 /root/.ssh/authorized_keys
+              
+              Then backups will automatically sync to:
+              {{ commvault_server_ip }}:{{ commvault_storage_path }}/{{ ansible_hostname }}
+              ================================================================
+
+    - name: "Test backup execution"
+      ansible.builtin.command: /usr/local/bin/mariadb_backup.sh test
+      register: test_backup
+      changed_when: false
+      failed_when: false
+
+    - name: "Display backup system status"
+      ansible.builtin.debug:
+        msg: |
+          ================================================================
+          NATIVE BACKUP SYSTEM CONFIGURED
+          ================================================================
+          
+          Backup Configuration:
+          - Method: {{ native_backup_method }}
+          - Directory: {{ mysql_backup_dir }}
+          - Schedule: Daily at 2:00 AM
+          - Retention: {{ mysql_backup_retention_days }} days
+          - Compression: {{ 'Enabled (pigz)' if mysql_backup_compress else 'Disabled' }}
+          
+          Databases to backup:
+          {% for db in mysql_backup_databases %}
+          - {{ db }}
+          {% endfor %}
+          
+          Available commands:
+          - Full backup:  /usr/local/bin/mariadb_backup.sh full
+          - Test backup:  /usr/local/bin/mariadb_backup.sh test
+          - Restore:      /usr/local/bin/mariadb_restore.sh <backup_file>
+          - Sync:         /usr/local/bin/sync_to_commvault.sh
+          
+          Backup storage:
+          - Local: {{ mysql_backup_dir }}/full/
+          - Remote: {{ commvault_server_ip }}:{{ commvault_storage_path }}
+          
+          Test backup status: {{ 'SUCCESS ✓' if test_backup.rc == 0 else 'FAILED ✗' }}
+          ================================================================
+
+  tags:
+    - native-backup

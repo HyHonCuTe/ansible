@@ -1,0 +1,55 @@
+---
+# Database backup tasks (Commvault-compatible)
+
+- name: "Setup database backup for Commvault"
+  block:
+    - name: "Create database backup user"
+      community.mysql.mysql_user:
+        name: "{{ commvault_db_backup_user }}"
+        password: "{{ commvault_db_backup_password }}"
+        priv: '*.*:SELECT,RELOAD,LOCK TABLES,REPLICATION CLIENT,SHOW VIEW,EVENT,TRIGGER'
+        host: 'localhost'
+        state: present
+      when: ansible_facts['services']['mariadb.service'] is defined
+
+    - name: "Create MySQL backup configuration"
+      ansible.builtin.template:
+        src: mysql_backup.cnf.j2
+        dest: /root/.mysql_backup.cnf
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: "Display database backup notice"
+      ansible.builtin.debug:
+        msg: |
+          ================================================================
+          DATABASE BACKUP CONFIGURATION
+          ================================================================
+          
+          MariaDB backup user created:
+          - Username: {{ commvault_db_backup_user }}
+          - Privileges: SELECT, RELOAD, LOCK TABLES, etc.
+          
+          For Commvault integration:
+          1. Login to Commvault Web Console
+          2. Create new Subclient for MySQL
+          3. Configure MySQL instance:
+             - Host: {{ ansible_host }}
+             - Port: 3306
+             - User: {{ commvault_db_backup_user }}
+             - Password: {{ commvault_db_backup_password }}
+          
+          4. Select databases to backup:
+          {% for db in mysql_backup_databases %}
+             - {{ db }}
+          {% endfor %}
+          
+          5. Set backup schedule
+          6. Run test backup
+          
+          Native backup is also configured as fallback
+          ================================================================
+
+  tags:
+    - db-backup-config

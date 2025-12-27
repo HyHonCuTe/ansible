@@ -11,6 +11,13 @@
     - configure
     - network
 
+- name: "Include IPS configuration tasks"
+  ansible.builtin.include_tasks: configure_ips.yml
+  when: suricata_ips_enabled | bool
+  tags:
+    - ips
+    - configure-ips
+
 - name: "Include web UI tasks"
   ansible.builtin.include_tasks: deploy_webui.yml
   when: suricata_web_ui_enabled | bool

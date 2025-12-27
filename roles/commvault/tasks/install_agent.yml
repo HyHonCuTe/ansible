@@ -1,0 +1,68 @@
+---
+# Install Commvault Agent on client machines
+
+- name: "Prepare Commvault Agent installation"
+  block:
+    - name: "Create agent directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /opt/commvault
+        - /var/log/commvault
+
+    - name: "Install agent prerequisites"
+      ansible.builtin.package:
+        name:
+          - wget
+          - lsof
+        state: present
+
+    - name: "Configure firewall for Commvault Agent"
+      ansible.posix.firewalld:
+        port: "{{ commvault_agent_port }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      when: ansible_facts['os_family'] == "RedHat"
+      ignore_errors: yes
+
+    - name: "Add Commvault Server to /etc/hosts"
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ commvault_server_ip }} {{ commvault_server_hostname }}"
+        state: present
+
+    - name: "Display agent installation notice"
+      ansible.builtin.debug:
+        msg: |
+          ================================================================
+          COMMVAULT AGENT INSTALLATION
+          ================================================================
+          
+          Agent installation requires:
+          
+          1. Download agent from Commvault Server:
+             https://{{ commvault_server_ip }}:8403
+             
+          2. Or use push installation from CommServe:
+             - Login to Commvault Web Console
+             - Navigate to: Client Computers > Add Client
+             - Select this host: {{ ansible_hostname }}
+             - Choose "Push Installation"
+          
+          3. Manual installation:
+             - Copy agent package to /opt/commvault/
+             - Run: ./cvpkgadd -silent
+          
+          Server prepared with:
+          - Firewall opened: {{ commvault_agent_port }}/tcp
+          - Directories created
+          - CommServe added to hosts: {{ commvault_server_ip }}
+          ================================================================
+
+  tags:
+    - agent-prep

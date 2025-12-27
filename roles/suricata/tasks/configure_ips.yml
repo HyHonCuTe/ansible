@@ -1,0 +1,150 @@
+---
+# Configure Suricata IPS (Intrusion Prevention System) Mode
+
+- name: "Check if running in IPS mode"
+  ansible.builtin.debug:
+    msg: "Configuring Suricata IPS with NFQueue for inline packet processing"
+
+- name: "Install iptables and NFQueue dependencies"
+  ansible.builtin.package:
+    name:
+      - iptables
+      - iptables-services
+      - libnetfilter_queue
+    state: present
+
+- name: "Install development packages (optional)"
+  ansible.builtin.package:
+    name:
+      - libnetfilter_queue-devel
+    state: present
+  ignore_errors: yes
+
+- name: "Stop firewalld to use iptables directly"
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: no
+  when: suricata_ips_use_nfqueue | bool
+  ignore_errors: yes
+
+- name: "Create IPS iptables rules script"
+  ansible.builtin.template:
+    src: ips_iptables.sh.j2
+    dest: /usr/local/bin/suricata_ips_setup.sh
+    owner: root
+    group: root
+    mode: '0755'
+  when: suricata_ips_enabled | bool
+
+- name: "Apply iptables rules for IPS mode"
+  ansible.builtin.shell: /usr/local/bin/suricata_ips_setup.sh
+  when: suricata_ips_enabled | bool
+  changed_when: true
+
+- name: "Create systemd service for IPS iptables persistence"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/suricata-ips-iptables.service
+    content: |
+      [Unit]
+      Description=Suricata IPS iptables rules
+      After=network.target
+      Before=suricata.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/suricata_ips_setup.sh
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  when: suricata_ips_enabled | bool
+  notify: reload systemd
+
+- name: "Enable and start IPS iptables service"
+  ansible.builtin.systemd:
+    name: suricata-ips-iptables
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  when: suricata_ips_enabled | bool
+
+- name: "Update Suricata config for IPS mode"
+  ansible.builtin.lineinfile:
+    path: /etc/suricata/suricata.yaml
+    regexp: '^(\s*)#?\s*{{ item.key }}:'
+    line: '{{ item.value }}'
+    backup: yes
+  loop:
+    - { key: 'nfq', value: 'nfq:' }
+    - { key: '  mode', value: '  mode: accept' }
+    - { key: '  repeat-mark', value: '  repeat-mark: 1' }
+    - { key: '  repeat-mask', value: '  repeat-mask: 1' }
+    - { key: '  route-queue', value: '  route-queue: 2' }
+    - { key: '  batchcount', value: '  batchcount: 20' }
+  when: suricata_ips_enabled | bool
+  notify: restart suricata
+
+- name: "Update systemd override for IPS mode"
+  ansible.builtin.file:
+    path: /etc/systemd/system/suricata.service.d
+    state: directory
+    mode: '0755'
+  when: suricata_ips_enabled | bool
+
+- name: "Create Suricata IPS systemd override"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/suricata.service.d/ips-mode.conf
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=/usr/sbin/suricata -c /etc/suricata/suricata.yaml --pidfile /var/run/suricata.pid -q 0 -q 1 -D
+      Restart=always
+      RestartSec=5
+    owner: root
+    group: root
+    mode: '0644'
+  when: suricata_ips_enabled | bool
+  notify:
+    - reload systemd
+    - restart suricata
+
+- name: "Convert alert rules to drop rules for IPS"
+  ansible.builtin.shell: |
+    sed -i.bak 's/^alert /drop /g' /etc/suricata/rules/custom.rules
+  when: 
+    - suricata_ips_enabled | bool
+    - suricata_ips_drop_mode | bool
+  changed_when: true
+  notify: restart suricata
+
+- name: "Display IPS mode status"
+  ansible.builtin.debug:
+    msg: |
+      Suricata IPS Configuration:
+      - Mode: {{ 'IPS (Inline Blocking)' if suricata_ips_enabled else 'IDS (Passive Monitoring)' }}
+      - NFQueue: {{ 'Enabled (Queue 0, 1)' if suricata_ips_enabled else 'Disabled' }}
+      - Drop Rules: {{ 'Active' if (suricata_ips_enabled and suricata_ips_drop_mode) else 'Alert Only' }}
+      - Traffic Flow: {{ 'PREROUTING → NFQueue → Suricata → POSTROUTING' if suricata_ips_enabled else 'Mirror/Tap → Suricata' }}
+
+- name: "Verify NFQueue kernel module"
+  ansible.builtin.shell: lsmod | grep -i nfnetlink_queue || modprobe nfnetlink_queue
+  when: suricata_ips_enabled | bool
+  changed_when: false
+  ignore_errors: yes
+
+- name: "Check iptables NFQueue rules"
+  ansible.builtin.command: iptables -L -n -v -t raw
+  register: iptables_check
+  when: suricata_ips_enabled | bool
+  changed_when: false
+
+- name: "Display iptables NFQueue configuration"
+  ansible.builtin.debug:
+    msg: "{{ iptables_check.stdout_lines }}"
+  when: 
+    - suricata_ips_enabled | bool
+    - iptables_check.stdout_lines is defined
