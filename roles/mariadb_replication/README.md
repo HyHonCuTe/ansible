@@ -1,217 +1,122 @@
 # MariaDB Replication Role
 
-Role này triển khai MariaDB với Primary-Replica replication để đảm bảo tính sẵn sàng cao cho database layer.
+## 📌 Overview
 
-## Mô Tả
+Triển khai **MariaDB Master-Slave Replication** cho high availability và read scalability.
 
-Role này thực hiện:
-- Cài đặt MariaDB server và client
-- Cấu hình Primary server với binary logging
-- Cấu hình Replica server với relay logging
-- Thiết lập replication user và permissions
-- Tạo demo database và tables
-- Deploy PHP web demo application
+## 🚀 Quick Start
 
-## Requirements
+```bash
+# Deploy replication
+./deploy_mariadb.sh
 
-- AlmaLinux/RHEL/CentOS 8+
-- Python 3
-- Apache HTTPD đã được cài đặt (từ webserver_ha role)
-- Firewalld service running
-- Ít nhất 2 servers
+# Or using playbook
+ansible-playbook playbooks/deploy_mariadb_replication.yml
 
-## Role Variables
+# Verify
+ansible-playbook playbooks/verify_mariadb_replication.yml
+```
 
-### defaults/main.yml
+## ⚙️ Variables
 
 ```yaml
-# Replication configuration
-mariadb_replication_role: ""  # "primary" or "replica"
-mariadb_server_id: 1          # Must be unique per server
-mariadb_primary_host: "192.168.1.27"
-mariadb_replica_host: "192.168.1.30"
+# Master Configuration
+mariadb_server_id: 1
+mariadb_bind_address: "0.0.0.0"
+mariadb_log_bin: "mysql-bin"
 
-# Passwords
-mariadb_root_password: "RootP@ssw0rd2025"
-mariadb_replication_user: "replication_user"
-mariadb_replication_password: "Repl!c@t10n2025"
+# Replication User
+mariadb_repl_user: "repl_user"
+mariadb_repl_password: "secure_password"
 
-# Demo database
-demo_database_name: "webapp_db"
-demo_database_user: "webapp_user"
-demo_database_password: "WebApp123!"
-
-# Performance
-mariadb_innodb_buffer_pool_size: "256M"
-mariadb_max_connections: 200
+# Databases to Replicate
+mariadb_binlog_do_db:
+  - "app_db"
+  - "web_db"
 ```
 
-### Inventory Variables
-
-**Quan trọng**: Phải set trong playbook khi gọi role:
-
-```yaml
-- hosts: web_servers[0]
-  vars:
-    mariadb_replication_role: "primary"
-    mariadb_server_id: 1
-
-- hosts: web_servers[1]
-  vars:
-    mariadb_replication_role: "replica"
-    mariadb_server_id: 2
-```
-
-## Dependencies
-
-- `webserver_ha` role (Apache HTTPD)
-- `community.mysql` collection
-
-## Example Playbook
-
-```yaml
-- name: Deploy MariaDB Primary
-  hosts: web_servers[0]
-  become: yes
-  vars:
-    mariadb_replication_role: "primary"
-    mariadb_server_id: 1
-  roles:
-    - role: mariadb_replication
-
-- name: Deploy MariaDB Replica
-  hosts: web_servers[1]
-  become: yes
-  vars:
-    mariadb_replication_role: "replica"
-    mariadb_server_id: 2
-  roles:
-    - role: mariadb_replication
-```
-
-## Features
-
-### Primary Server
-- ✅ Binary logging enabled
-- ✅ Replication user created
-- ✅ Write operations allowed
-- ✅ Demo database with sample data
-
-### Replica Server
-- ✅ Relay logging enabled
-- ✅ Automatic sync from Primary
-- ✅ Read operations
-- ✅ Data consistency with Primary
-
-### Web Demo
-- ✅ PHP web interface
-- ✅ Real-time data display
-- ✅ Add user functionality
-- ✅ Visual verification of replication
-
-## Tasks Files
-
-- `main.yml` - Orchestration
-- `install.yml` - Install MariaDB
-- `configure_primary.yml` - Setup Primary server
-- `configure_replica.yml` - Setup Replica server
-- `create_demo_db.yml` - Create demo database
-- `deploy_web_demo.yml` - Deploy PHP web app
-
-## Templates
-
-- `mariadb.cnf.j2` - MariaDB server configuration
-- `index_db.php.j2` - Web demo interface
-
-## Files
-
-- `add_user.php` - PHP script to add users
-- `index.php` - Main PHP page
-
-## Testing
-
-### Verify Replication
+## 🔧 Operations
 
 ```bash
-# On PRIMARY
-mysql -u root -p'RootP@ssw0rd2025' -e "SHOW MASTER STATUS"
+# On Master - check status
+mysql -u root -p -e "SHOW MASTER STATUS\G"
 
-# On REPLICA
-mysql -u root -p'RootP@ssw0rd2025' -e "SHOW SLAVE STATUS\G"
-```
+# On Slave - check status
+mysql -u root -p -e "SHOW SLAVE STATUS\G"
 
-### Test Data Sync
-
-```bash
-# Insert on PRIMARY
-mysql -u root -p'RootP@ssw0rd2025' webapp_db \
-  -e "INSERT INTO users (username, email) VALUES ('test', 'test@example.com')"
-
-# Check on REPLICA (should appear within 1 second)
-mysql -u root -p'RootP@ssw0rd2025' webapp_db \
-  -e "SELECT * FROM users WHERE username='test'"
-```
-
-### Web Demo Test
-
-1. Access: http://192.168.1.100/db-demo/
-2. Refresh until you see WEB-1 (PRIMARY)
-3. Add a user
-4. Refresh until you see WEB-2 (REPLICA)
-5. Verify user appears
-
-## Troubleshooting
-
-### Replication Stopped
-
-```bash
-# Check status
-mysql -u root -p -e "SHOW SLAVE STATUS\G" | grep Running
-
-# If not running
-mysql -u root -p
-> STOP SLAVE;
-> START SLAVE;
-> SHOW SLAVE STATUS\G;
-```
-
-### Sync Lag
-
-```bash
-# Check lag
+# Check replication lag
 mysql -u root -p -e "SHOW SLAVE STATUS\G" | grep Seconds_Behind_Master
 
-# Should be 0 or very low
+# Test replication
+# On Master:
+mysql -u root -p
+> CREATE DATABASE test_repl;
+> USE test_repl;
+> CREATE TABLE test (id INT);
+> INSERT INTO test VALUES (1);
+
+# On Slave:
+mysql -u root -p
+> USE test_repl;
+> SELECT * FROM test;  # Should show the inserted row
 ```
 
-### Connection Issues
+## 🐛 Troubleshooting
+
+**Replication stopped:**
+```bash
+# On Slave
+mysql -u root -p -e "SHOW SLAVE STATUS\G" | grep -E "Slave_IO_Running|Slave_SQL_Running|Last_Error"
+
+# Common errors:
+
+# 1. Duplicate key error
+mysql -u root -p
+> STOP SLAVE;
+> SET GLOBAL SQL_SLAVE_SKIP_COUNTER = 1;
+> START SLAVE;
+
+# 2. Connection error
+> SHOW SLAVE STATUS\G  # Check Last_IO_Error
+# Verify network, firewall (port 3306)
+
+# 3. Reset replication
+> STOP SLAVE;
+> RESET SLAVE;
+> CHANGE MASTER TO
+  MASTER_HOST='192.168.1.50',
+  MASTER_USER='repl_user',
+  MASTER_PASSWORD='password',
+  MASTER_LOG_FILE='mysql-bin.000001',
+  MASTER_LOG_POS=154;
+> START SLAVE;
+```
+
+**High replication lag:**
+```bash
+# Check slave load
+mysql -u root -p -e "SHOW PROCESSLIST;"
+
+# Optimize queries
+mysql -u root -p -e "SHOW FULL PROCESSLIST;"
+
+# Consider parallel replication
+sudo vi /etc/my.cnf.d/server.cnf
+# Add:
+slave-parallel-threads=4
+```
+
+## 📊 Monitoring
 
 ```bash
-# Test connectivity
-telnet 192.168.1.27 3306
+# Replication status
+mysql -u root -p -e "SHOW SLAVE STATUS\G" | grep -E "Slave_IO|Slave_SQL|Behind_Master"
 
-# Check firewall
-firewall-cmd --list-ports
+# Binary log position
+mysql -u root -p -e "SHOW MASTER STATUS;"
+
+# Connected slaves (on Master)
+mysql -u root -p -e "SHOW SLAVE HOSTS;"
 ```
 
-## Security Notes
-
-- Passwords are stored in defaults - **change before production**
-- Replication user has minimal required permissions
-- Consider SSL for replication traffic
-- Root access restricted to localhost by default
-
-## Performance Tips
-
-- Increase `innodb_buffer_pool_size` for more RAM
-- Monitor slow query log
-- Use GTID replication for advanced setups
-- Consider multi-master for write scaling
-
-## License
-
-MIT
-
-## Author
-
-Ansible Automation Team
+**Last Updated**: 2025-12-27
